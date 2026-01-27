@@ -27,4 +27,5 @@ venv/
 *.swo
 *~
 .DS_Store
+.claude/
 site/
