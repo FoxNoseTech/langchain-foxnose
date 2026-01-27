@@ -11,7 +11,11 @@ FoxNose eliminates the "DIY RAG problem" where developers need to stitch togethe
 - **No ETL/sync** — content changes auto-update embeddings
 - **Enterprise features** — environments, localization, versioning, RBAC out of the box
 
-This package provides a LangChain `BaseRetriever` implementation that wraps the FoxNose Flux API, letting you use FoxNose as the knowledge retrieval layer in any LangChain pipeline.
+This package provides LangChain integrations that wrap the FoxNose Flux API:
+
+- **`FoxNoseRetriever`** — query-based retrieval for RAG pipelines
+- **`FoxNoseLoader`** — bulk document loading with cursor-based pagination
+- **`create_foxnose_tool`** — search tool for LLM agents
 
 ## Quick Start
 
@@ -45,6 +49,8 @@ docs = retriever.invoke("How do I reset my password?")
 
 - [Getting Started](getting-started.md) — installation, prerequisites, first retriever
 - [Retriever](retriever.md) — deep dive into `FoxNoseRetriever`
+- [Document Loader](loader.md) — bulk-load documents with `FoxNoseLoader`
+- [Search Tool](tool.md) — agent-ready search with `create_foxnose_tool`
 - [Configuration](configuration.md) — all parameters explained
 - [Examples](examples.md) — common patterns and use cases
 - [API Reference](api-reference.md) — auto-generated from source

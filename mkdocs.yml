@@ -70,6 +70,8 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Retriever: retriever.md
+  - Document Loader: loader.md
+  - Search Tool: tool.md
   - Configuration: configuration.md
   - Examples: examples.md
   - API Reference: api-reference.md
