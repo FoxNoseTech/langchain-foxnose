@@ -3,8 +3,10 @@
 ## Prerequisites
 
 - Python >= 3.9
-- A FoxNose workspace with at least one folder containing vectorized content
+- A [FoxNose](https://foxnose.net?utm_source=readthedocs&utm_medium=documentation&utm_campaign=langchain-foxnose) workspace with at least one folder containing vectorized content
 - A Flux API key (public + secret)
+
+See the [FoxNose documentation](https://foxnose.net/docs?utm_source=readthedocs&utm_medium=documentation&utm_campaign=langchain-foxnose) for workspace setup and API key creation.
 
 ## Installation
 

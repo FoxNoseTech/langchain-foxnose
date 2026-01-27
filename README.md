@@ -6,7 +6,7 @@
 [![CI](https://github.com/FoxNoseTech/langchain-foxnose/actions/workflows/ci.yml/badge.svg)](https://github.com/FoxNoseTech/langchain-foxnose/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/FoxNoseTech/langchain-foxnose/branch/main/graph/badge.svg)](https://codecov.io/gh/FoxNoseTech/langchain-foxnose)
 
-LangChain integration for [FoxNose](https://foxnose.net) — the serverless knowledge platform purpose-built as the knowledge layer for RAG and AI agents.
+LangChain integration for [FoxNose](https://foxnose.net?utm_source=github&utm_medium=repository&utm_campaign=langchain-foxnose) — the serverless knowledge platform purpose-built as the knowledge layer for RAG and AI agents.
 
 ## Installation
 
@@ -127,6 +127,7 @@ docs = await retriever.ainvoke("search query")
 - [Configuration](https://langchain-foxnose.readthedocs.io/configuration/)
 - [Examples](https://langchain-foxnose.readthedocs.io/examples/)
 - [API Reference](https://langchain-foxnose.readthedocs.io/api-reference/)
+- [FoxNose Documentation](https://foxnose.net/docs?utm_source=github&utm_medium=repository&utm_campaign=langchain-foxnose)
 
 ## License
 

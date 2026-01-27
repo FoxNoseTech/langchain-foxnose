@@ -1,6 +1,6 @@
 # langchain-foxnose
 
-LangChain integration for [FoxNose](https://foxnose.net) — the serverless knowledge platform purpose-built as the knowledge layer for RAG and AI agents.
+LangChain integration for [FoxNose](https://foxnose.net?utm_source=readthedocs&utm_medium=documentation&utm_campaign=langchain-foxnose) — the serverless knowledge platform purpose-built as the knowledge layer for RAG and AI agents.
 
 ## Why langchain-foxnose?
 
@@ -48,3 +48,4 @@ docs = retriever.invoke("How do I reset my password?")
 - [Configuration](configuration.md) — all parameters explained
 - [Examples](examples.md) — common patterns and use cases
 - [API Reference](api-reference.md) — auto-generated from source
+- [FoxNose Documentation](https://foxnose.net/docs?utm_source=readthedocs&utm_medium=documentation&utm_campaign=langchain-foxnose) — main FoxNose platform docs

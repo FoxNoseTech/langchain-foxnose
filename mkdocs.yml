@@ -1,5 +1,5 @@
 site_name: langchain-foxnose
-site_url: https://foxnosetech.github.io/langchain-foxnose/
+site_url: https://langchain-foxnose.readthedocs.io/en/latest/
 site_description: LangChain integration for FoxNose — the knowledge layer for RAG and AI agents
 site_author: FoxNose
 
@@ -80,6 +80,6 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/FoxNoseTech/langchain-foxnose
     - icon: fontawesome/solid/globe
-      link: https://foxnose.net
+      link: https://foxnose.net?utm_source=readthedocs&utm_medium=documentation&utm_campaign=langchain-foxnose
 
 copyright: Copyright &copy; 2024-2026 FoxNose

@@ -46,9 +46,10 @@ docs = [
 ]
 
 [project.urls]
-"Homepage" = "https://foxnose.net"
-"Source" = "https://github.com/FoxNoseTech/langchain-foxnose"
+"Homepage" = "https://foxnose.net?utm_source=github&utm_medium=repository&utm_campaign=langchain-foxnose"
 "Documentation" = "https://langchain-foxnose.readthedocs.io"
+"FoxNose Docs" = "https://foxnose.net/docs?utm_source=github&utm_medium=repository&utm_campaign=langchain-foxnose"
+"Source" = "https://github.com/FoxNoseTech/langchain-foxnose"
 
 [tool.pytest.ini_options]
 addopts = "-q"
