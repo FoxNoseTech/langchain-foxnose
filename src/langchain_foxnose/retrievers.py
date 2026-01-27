@@ -180,9 +180,7 @@ class FoxNoseRetriever(BaseRetriever):
 
         # Threshold range checks
         if self.text_threshold is not None and not (0 <= self.text_threshold <= 1):
-            raise ValueError(
-                f"text_threshold must be between 0 and 1, got {self.text_threshold}."
-            )
+            raise ValueError(f"text_threshold must be between 0 and 1, got {self.text_threshold}.")
         if self.similarity_threshold is not None and not (0 <= self.similarity_threshold <= 1):
             raise ValueError(
                 f"similarity_threshold must be between 0 and 1, got {self.similarity_threshold}."
