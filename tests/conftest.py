@@ -110,3 +110,44 @@ def mock_async_flux_client(sample_response: dict[str, Any]) -> AsyncMock:
     client = AsyncMock()
     client.search.return_value = sample_response
     return client
+
+
+# ---------------------------------------------------------------------------
+# Loader helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_list_response(
+    results: list[dict[str, Any]] | None = None,
+    *,
+    count: int | None = None,
+    next_cursor: str | None = None,
+    previous_cursor: str | None = None,
+) -> dict[str, Any]:
+    """Build a realistic FoxNose ``list_resources`` response."""
+    if results is None:
+        results = SAMPLE_RESULTS
+    return {
+        "count": count if count is not None else len(results),
+        "next": next_cursor,
+        "previous": previous_cursor,
+        "results": results,
+    }
+
+
+@pytest.fixture()
+def mock_flux_client_with_list(sample_response: dict[str, Any]) -> MagicMock:
+    """Return a mocked FluxClient with pre-configured search and list_resources."""
+    client = MagicMock()
+    client.search.return_value = sample_response
+    client.list_resources.return_value = _make_list_response()
+    return client
+
+
+@pytest.fixture()
+def mock_async_flux_client_with_list(sample_response: dict[str, Any]) -> AsyncMock:
+    """Return a mocked AsyncFluxClient with pre-configured search and list_resources."""
+    client = AsyncMock()
+    client.search.return_value = sample_response
+    client.list_resources.return_value = _make_list_response()
+    return client
