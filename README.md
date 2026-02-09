@@ -8,6 +8,10 @@
 
 LangChain integration for [FoxNose](https://foxnose.net?utm_source=github&utm_medium=repository&utm_campaign=langchain-foxnose) — the serverless knowledge platform purpose-built as the knowledge layer for RAG and AI agents.
 
+- **`FoxNoseRetriever`** — query-based retrieval for RAG pipelines
+- **`FoxNoseLoader`** — bulk document loading with cursor-based pagination
+- **`create_foxnose_tool`** — search tool for LLM agents
+
 ## Installation
 
 ```bash
@@ -47,6 +51,8 @@ for doc in docs:
 ## Features
 
 - **All search modes**: text, vector, hybrid, and vector-boosted search
+- **Bulk document loading**: cursor-based pagination with lazy loading for large folders
+- **Agent-ready search tool**: wrap any retriever as a tool for LLM agents
 - **Flexible content mapping**: single field, multiple fields, or custom mapper function
 - **Metadata control**: whitelist, blacklist, or include system metadata
 - **Native async**: uses `AsyncFluxClient` for true async when available
@@ -101,6 +107,53 @@ retriever = FoxNoseRetriever(
 )
 ```
 
+## Document Loader
+
+`FoxNoseLoader` iterates over all resources in a folder using cursor-based pagination. Use it to bulk-load documents for indexing, batch processing, or seeding a local vector store.
+
+```python
+from langchain_foxnose import FoxNoseLoader
+
+loader = FoxNoseLoader(
+    client=client,
+    folder_path="knowledge-base",
+    page_content_field="body",
+    batch_size=50,
+)
+
+# Load all documents at once
+docs = loader.load()
+
+# Or iterate lazily for large folders
+for doc in loader.lazy_load():
+    print(doc.metadata.get("key"), doc.page_content[:100])
+```
+
+## Agent Tool
+
+`create_foxnose_tool` wraps a retriever as a LangChain tool that LLM agents can call.
+
+```python
+from langchain_foxnose import create_foxnose_tool
+
+tool = create_foxnose_tool(
+    client=client,
+    folder_path="knowledge-base",
+    page_content_field="body",
+    name="kb_search",
+    description="Search the knowledge base for relevant information.",
+    search_mode="hybrid",
+    top_k=5,
+)
+
+# Use directly
+result = tool.invoke("How do I reset my password?")
+
+# Or plug into any LangChain agent
+# from langgraph.prebuilt import create_react_agent
+# agent = create_react_agent(llm, tools=[tool])
+```
+
 ## Async Usage
 
 ```python
@@ -124,6 +177,9 @@ docs = await retriever.ainvoke("search query")
 ## Documentation
 
 - [Getting Started](https://langchain-foxnose.readthedocs.io/getting-started/)
+- [Retriever](https://langchain-foxnose.readthedocs.io/retriever/)
+- [Document Loader](https://langchain-foxnose.readthedocs.io/loader/)
+- [Search Tool](https://langchain-foxnose.readthedocs.io/tool/)
 - [Configuration](https://langchain-foxnose.readthedocs.io/configuration/)
 - [Examples](https://langchain-foxnose.readthedocs.io/examples/)
 - [API Reference](https://langchain-foxnose.readthedocs.io/api-reference/)
