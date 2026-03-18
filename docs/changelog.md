@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 (2026-03-18)
+
+- Align package metadata versioning so `langchain_foxnose.__version__` matches the published package version
+- Require `foxnose-sdk>=0.4.2` for the secure-auth signing fix
+
 ## 0.1.0 (2026-01-27)
 
 Initial release.
