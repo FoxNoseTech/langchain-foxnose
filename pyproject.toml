@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langchain-foxnose"
-version = "0.2.0"
+version = "0.2.1"
 description = "LangChain integration for FoxNose - the knowledge layer for RAG and AI agents"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -26,8 +26,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "foxnose-sdk>=0.2.0",
-    "langchain-core>=0.3.0,<1.0",
+    "foxnose-sdk>=0.4.2",
+    "langchain-core>=0.3.0,<2.0",
 ]
 
 [project.optional-dependencies]
