@@ -14,9 +14,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff
+      - run: pip install -e ".[lint]"
       - run: ruff check src/ tests/
       - run: ruff format --check src/ tests/
+      - run: mypy src/
 
   test:
     runs-on: ubuntu-latest
@@ -29,8 +30,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[test]"
-      - name: Run tests with coverage
-        run: pytest tests/ --ignore=tests/integration --cov=langchain_foxnose --cov-report=xml --cov-report=term-missing
+      - name: Run unit tests with coverage
+        run: pytest tests/unit_tests/ --disable-socket --allow-unix-socket --cov=langchain_foxnose --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12'
@@ -39,3 +40,22 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           fail_ci_if_error: false
+
+  integration-test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[test]"
+      - name: Run integration tests
+        run: pytest tests/integration_tests/
+        env:
+          FOXNOSE_BASE_URL: ${{ secrets.FOXNOSE_BASE_URL }}
+          FOXNOSE_API_PREFIX: ${{ secrets.FOXNOSE_API_PREFIX }}
+          FOXNOSE_PUBLIC_KEY: ${{ secrets.FOXNOSE_PUBLIC_KEY }}
+          FOXNOSE_SECRET_KEY: ${{ secrets.FOXNOSE_SECRET_KEY }}
+          FOXNOSE_FOLDER_PATH: ${{ secrets.FOXNOSE_FOLDER_PATH }}
+          FOXNOSE_CONTENT_FIELD: ${{ secrets.FOXNOSE_CONTENT_FIELD }}

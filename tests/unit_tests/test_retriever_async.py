@@ -262,3 +262,49 @@ class TestRetrieverAsyncEmbeddings:
         kwargs = mock_async_flux_client.boosted_search.call_args[1]
         assert kwargs["field"] == "embedding"
         assert kwargs["query_vector"] == [0.1, 0.2]
+
+
+class TestRetrieverAsyncRuntimeTopK:
+    """Async runtime top_k override via ainvoke(..., top_k=N)."""
+
+    @pytest.mark.asyncio
+    async def test_ainvoke_runtime_top_k(self, mock_async_flux_client: AsyncMock) -> None:
+        retriever = FoxNoseRetriever(
+            async_client=mock_async_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="hybrid",
+            top_k=10,
+        )
+        await retriever.ainvoke("query", top_k=2)
+        kwargs = mock_async_flux_client.hybrid_search.call_args[1]
+        assert kwargs["top_k"] == 2
+
+    @pytest.mark.asyncio
+    async def test_ainvoke_without_runtime_top_k_uses_default(
+        self, mock_async_flux_client: AsyncMock
+    ) -> None:
+        retriever = FoxNoseRetriever(
+            async_client=mock_async_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="hybrid",
+            top_k=7,
+        )
+        await retriever.ainvoke("query")
+        kwargs = mock_async_flux_client.hybrid_search.call_args[1]
+        assert kwargs["top_k"] == 7
+
+    @pytest.mark.asyncio
+    async def test_ainvoke_runtime_top_k_sync_fallback(self, mock_flux_client: MagicMock) -> None:
+        """When only sync client is provided, ainvoke should still respect runtime top_k."""
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="hybrid",
+            top_k=10,
+        )
+        await retriever.ainvoke("query", top_k=1)
+        kwargs = mock_flux_client.hybrid_search.call_args[1]
+        assert kwargs["top_k"] == 1

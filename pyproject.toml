@@ -35,9 +35,14 @@ test = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
     "pytest-cov>=4.1",
+    "pytest-socket",
+    # Pin exact version: new releases may add tests that break CI.
+    # Using 0.3.x line for Python 3.9 compatibility (1.x requires >=3.10).
+    "langchain-tests==0.3.20",
 ]
 lint = [
     "ruff>=0.4",
+    "mypy>=1.10",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -46,10 +51,11 @@ docs = [
 ]
 
 [project.urls]
-"Homepage" = "https://foxnose.net?utm_source=github&utm_medium=repository&utm_campaign=langchain-foxnose"
+"Homepage" = "https://foxnose.net"
 "Documentation" = "https://langchain-foxnose.readthedocs.io"
-"FoxNose Docs" = "https://foxnose.net/docs?utm_source=github&utm_medium=repository&utm_campaign=langchain-foxnose"
-"Source" = "https://github.com/FoxNoseTech/langchain-foxnose"
+"Repository" = "https://github.com/FoxNoseTech/langchain-foxnose"
+"Issue Tracker" = "https://github.com/FoxNoseTech/langchain-foxnose/issues"
+"Changelog" = "https://langchain-foxnose.readthedocs.io/changelog/"
 
 [tool.pytest.ini_options]
 addopts = "-q"
@@ -66,3 +72,13 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["langchain_foxnose"]
+
+[tool.mypy]
+python_version = "3.9"
+disallow_untyped_defs = true
+warn_return_any = false
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["foxnose_sdk.*"]
+ignore_missing_imports = true

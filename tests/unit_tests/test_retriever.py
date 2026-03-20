@@ -85,6 +85,26 @@ class TestRetrieverValidation:
                 top_k=-5,
             )
 
+    def test_constructor_k_alias(self) -> None:
+        """LangChain standard tests construct with k=N."""
+        retriever = FoxNoseRetriever(
+            client=MagicMock(),
+            folder_path="kb",
+            page_content_field="body",
+            k=3,
+        )
+        assert retriever.top_k == 3
+
+    def test_constructor_rejects_both_k_and_top_k(self) -> None:
+        with pytest.raises((ValueError, ValidationError), match=r"(?i)cannot pass both"):
+            FoxNoseRetriever(
+                client=MagicMock(),
+                folder_path="kb",
+                page_content_field="body",
+                k=3,
+                top_k=5,
+            )
+
     def test_rejects_both_metadata_field_options(self) -> None:
         with pytest.raises((ValueError, ValidationError), match=r"(?i)mutually exclusive"):
             FoxNoseRetriever(
@@ -754,3 +774,85 @@ class TestRetrieverVectorFieldSearch:
         kwargs = mock_flux_client.boosted_search.call_args[1]
         assert kwargs["field"] == "embedding"
         assert kwargs["query_vector"] == [0.9, 0.8]
+
+
+# ---------------------------------------------------------------------------
+# Runtime top_k override
+# ---------------------------------------------------------------------------
+
+
+class TestRetrieverRuntimeTopK:
+    """Runtime top_k override via invoke(..., top_k=N)."""
+
+    def test_invoke_runtime_top_k_hybrid(self, mock_flux_client: MagicMock) -> None:
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="hybrid",
+            top_k=10,
+        )
+        retriever.invoke("query", top_k=3)
+        kwargs = mock_flux_client.hybrid_search.call_args[1]
+        assert kwargs["top_k"] == 3
+
+    def test_invoke_runtime_top_k_text(self, mock_flux_client: MagicMock) -> None:
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="text",
+            top_k=10,
+        )
+        retriever.invoke("query", top_k=1)
+        body = mock_flux_client.search.call_args[1]["body"]
+        assert body["limit"] == 1
+
+    def test_invoke_runtime_top_k_vector(self, mock_flux_client: MagicMock) -> None:
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="vector",
+            top_k=10,
+        )
+        retriever.invoke("query", top_k=2)
+        kwargs = mock_flux_client.vector_search.call_args[1]
+        assert kwargs["top_k"] == 2
+
+    def test_invoke_without_runtime_top_k_uses_default(self, mock_flux_client: MagicMock) -> None:
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="hybrid",
+            top_k=7,
+        )
+        retriever.invoke("query")
+        kwargs = mock_flux_client.hybrid_search.call_args[1]
+        assert kwargs["top_k"] == 7
+
+    def test_invoke_runtime_k_alias(self, mock_flux_client: MagicMock) -> None:
+        """LangChain standard tests use 'k' as the default arg name."""
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="hybrid",
+            top_k=10,
+        )
+        retriever.invoke("query", k=2)
+        kwargs = mock_flux_client.hybrid_search.call_args[1]
+        assert kwargs["top_k"] == 2
+
+    def test_invoke_runtime_top_k_validation(self, mock_flux_client: MagicMock) -> None:
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="hybrid",
+        )
+        with pytest.raises(ValueError, match="must be an integer >= 1"):
+            retriever.invoke("query", top_k=0)
+        with pytest.raises(ValueError, match="must be an integer >= 1"):
+            retriever.invoke("query", top_k=-1)

@@ -163,6 +163,18 @@ class FoxNoseRetriever(BaseRetriever):
     (``vector_field_search``).  Required when ``embeddings`` or
     ``query_vector`` is provided.  Mutually exclusive with ``vector_fields``."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _alias_k_to_top_k(cls, data: Any) -> Any:
+        """Accept ``k`` as a constructor alias for ``top_k``."""
+        if isinstance(data, dict):
+            k_val = data.pop("k", None)
+            if k_val is not None:
+                if "top_k" in data:
+                    raise ValueError("Cannot pass both 'top_k' and 'k'. Use one or the other.")
+                data["top_k"] = k_val
+        return data
+
     @model_validator(mode="after")
     def _validate_config(self) -> FoxNoseRetriever:
         # At least one client
@@ -370,45 +382,61 @@ class FoxNoseRetriever(BaseRetriever):
             "vector_field mode requires 'embeddings' or 'query_vector'."
         )
 
-    def _execute_search(self, client: Any, query: str) -> dict[str, Any]:
+    def _effective_top_k(self, override: int | None = None) -> int:
+        """Return the effective top_k, preferring a runtime override."""
+        if override is not None:
+            if not isinstance(override, int) or override < 1:
+                raise ValueError(f"Runtime top_k must be an integer >= 1, got {override!r}.")
+            return override
+        return self.top_k
+
+    def _execute_search(
+        self, client: Any, query: str, *, top_k: int | None = None
+    ) -> dict[str, Any]:
         """Dispatch to the appropriate SDK convenience method (sync)."""
         extra = self._build_extra_body()
         named = self._get_named_overrides()
+        effective_top_k = self._effective_top_k(top_k)
 
         if self.search_mode == "text":
-            return self._search_text(client, query, named, extra)
+            return self._search_text(client, query, named, extra, effective_top_k)
         elif self.search_mode == "vector":
-            return self._search_vector(client, query, named, extra)
+            return self._search_vector(client, query, named, extra, effective_top_k)
         elif self.search_mode == "hybrid":
-            return self._search_hybrid(client, query, named, extra)
+            return self._search_hybrid(client, query, named, extra, effective_top_k)
         elif self.search_mode == "vector_boosted":
-            return self._search_boosted(client, query, named, extra)
+            return self._search_boosted(client, query, named, extra, effective_top_k)
         else:  # pragma: no cover — guarded by validator
             raise ValueError(f"Unknown search_mode: {self.search_mode}")
 
-    async def _aexecute_search(self, client: Any, query: str) -> dict[str, Any]:
+    async def _aexecute_search(
+        self, client: Any, query: str, *, top_k: int | None = None
+    ) -> dict[str, Any]:
         """Dispatch to the appropriate SDK convenience method (async)."""
         extra = self._build_extra_body()
         named = self._get_named_overrides()
+        effective_top_k = self._effective_top_k(top_k)
 
         if self.search_mode == "text":
-            return await self._asearch_text(client, query, named, extra)
+            return await self._asearch_text(client, query, named, extra, effective_top_k)
         elif self.search_mode == "vector":
-            return await self._asearch_vector(client, query, named, extra)
+            return await self._asearch_vector(client, query, named, extra, effective_top_k)
         elif self.search_mode == "hybrid":
-            return await self._asearch_hybrid(client, query, named, extra)
+            return await self._asearch_hybrid(client, query, named, extra, effective_top_k)
         elif self.search_mode == "vector_boosted":
-            return await self._asearch_boosted(client, query, named, extra)
+            return await self._asearch_boosted(client, query, named, extra, effective_top_k)
         else:  # pragma: no cover
             raise ValueError(f"Unknown search_mode: {self.search_mode}")
 
     # --- Per-mode dispatch (sync) ---
 
-    def _search_text(self, client: Any, query: str, named: dict, extra: dict) -> dict[str, Any]:
+    def _search_text(
+        self, client: Any, query: str, named: dict, extra: dict, top_k: int
+    ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "search_mode": "text",
             "find_text": self._build_find_text(query),
-            "limit": named.get("limit", self.top_k),
+            "limit": named.get("limit", top_k),
         }
         if "offset" in named:
             body["offset"] = named["offset"]
@@ -420,14 +448,16 @@ class FoxNoseRetriever(BaseRetriever):
         body.update(extra)
         return client.search(self.folder_path, body=body)
 
-    def _search_vector(self, client: Any, query: str, named: dict, extra: dict) -> dict[str, Any]:
+    def _search_vector(
+        self, client: Any, query: str, named: dict, extra: dict, top_k: int
+    ) -> dict[str, Any]:
         if self.vector_field is not None:
             qv = self._resolve_query_vector(query)
             return client.vector_field_search(
                 self.folder_path,
                 field=self.vector_field,
                 query_vector=qv,
-                top_k=self.top_k,
+                top_k=top_k,
                 similarity_threshold=self.similarity_threshold,
                 limit=named.get("limit"),
                 offset=named.get("offset"),
@@ -437,21 +467,23 @@ class FoxNoseRetriever(BaseRetriever):
             self.folder_path,
             query=query,
             fields=self.vector_fields,
-            top_k=self.top_k,
+            top_k=top_k,
             similarity_threshold=self.similarity_threshold,
             limit=named.get("limit"),
             offset=named.get("offset"),
             **extra,
         )
 
-    def _search_hybrid(self, client: Any, query: str, named: dict, extra: dict) -> dict[str, Any]:
+    def _search_hybrid(
+        self, client: Any, query: str, named: dict, extra: dict, top_k: int
+    ) -> dict[str, Any]:
         hc = StrictHybridConfig(**(self.hybrid_config or {}))
         return client.hybrid_search(
             self.folder_path,
             query=query,
             find_text=self._build_find_text(query),
             fields=self.vector_fields,
-            top_k=self.top_k,
+            top_k=top_k,
             similarity_threshold=self.similarity_threshold,
             vector_weight=hc.vector_weight,
             text_weight=hc.text_weight,
@@ -461,11 +493,13 @@ class FoxNoseRetriever(BaseRetriever):
             **extra,
         )
 
-    def _search_boosted(self, client: Any, query: str, named: dict, extra: dict) -> dict[str, Any]:
+    def _search_boosted(
+        self, client: Any, query: str, named: dict, extra: dict, top_k: int
+    ) -> dict[str, Any]:
         bc = StrictVectorBoostConfig(**(self.vector_boost_config or {}))
         kwargs: dict[str, Any] = {
             "find_text": self._build_find_text(query),
-            "top_k": self.top_k,
+            "top_k": top_k,
             "similarity_threshold": self.similarity_threshold,
             "boost_factor": bc.boost_factor,
             "boost_similarity_threshold": bc.similarity_threshold,
@@ -484,12 +518,12 @@ class FoxNoseRetriever(BaseRetriever):
     # --- Per-mode dispatch (async) ---
 
     async def _asearch_text(
-        self, client: Any, query: str, named: dict, extra: dict
+        self, client: Any, query: str, named: dict, extra: dict, top_k: int
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "search_mode": "text",
             "find_text": self._build_find_text(query),
-            "limit": named.get("limit", self.top_k),
+            "limit": named.get("limit", top_k),
         }
         if "offset" in named:
             body["offset"] = named["offset"]
@@ -502,7 +536,7 @@ class FoxNoseRetriever(BaseRetriever):
         return await client.search(self.folder_path, body=body)
 
     async def _asearch_vector(
-        self, client: Any, query: str, named: dict, extra: dict
+        self, client: Any, query: str, named: dict, extra: dict, top_k: int
     ) -> dict[str, Any]:
         if self.vector_field is not None:
             qv = await self._aresolve_query_vector(query)
@@ -510,7 +544,7 @@ class FoxNoseRetriever(BaseRetriever):
                 self.folder_path,
                 field=self.vector_field,
                 query_vector=qv,
-                top_k=self.top_k,
+                top_k=top_k,
                 similarity_threshold=self.similarity_threshold,
                 limit=named.get("limit"),
                 offset=named.get("offset"),
@@ -520,7 +554,7 @@ class FoxNoseRetriever(BaseRetriever):
             self.folder_path,
             query=query,
             fields=self.vector_fields,
-            top_k=self.top_k,
+            top_k=top_k,
             similarity_threshold=self.similarity_threshold,
             limit=named.get("limit"),
             offset=named.get("offset"),
@@ -528,7 +562,7 @@ class FoxNoseRetriever(BaseRetriever):
         )
 
     async def _asearch_hybrid(
-        self, client: Any, query: str, named: dict, extra: dict
+        self, client: Any, query: str, named: dict, extra: dict, top_k: int
     ) -> dict[str, Any]:
         hc = StrictHybridConfig(**(self.hybrid_config or {}))
         return await client.hybrid_search(
@@ -536,7 +570,7 @@ class FoxNoseRetriever(BaseRetriever):
             query=query,
             find_text=self._build_find_text(query),
             fields=self.vector_fields,
-            top_k=self.top_k,
+            top_k=top_k,
             similarity_threshold=self.similarity_threshold,
             vector_weight=hc.vector_weight,
             text_weight=hc.text_weight,
@@ -547,12 +581,12 @@ class FoxNoseRetriever(BaseRetriever):
         )
 
     async def _asearch_boosted(
-        self, client: Any, query: str, named: dict, extra: dict
+        self, client: Any, query: str, named: dict, extra: dict, top_k: int
     ) -> dict[str, Any]:
         bc = StrictVectorBoostConfig(**(self.vector_boost_config or {}))
         kwargs: dict[str, Any] = {
             "find_text": self._build_find_text(query),
-            "top_k": self.top_k,
+            "top_k": top_k,
             "similarity_threshold": self.similarity_threshold,
             "boost_factor": bc.boost_factor,
             "boost_similarity_threshold": bc.similarity_threshold,
@@ -586,6 +620,7 @@ class FoxNoseRetriever(BaseRetriever):
         query: str,
         *,
         run_manager: CallbackManagerForRetrieverRun,
+        **kwargs: Any,
     ) -> list[Document]:
         """Synchronous retrieval using FluxClient."""
         if self.client is None:
@@ -593,7 +628,8 @@ class FoxNoseRetriever(BaseRetriever):
                 "Synchronous retrieval requires a 'client' (FluxClient). "
                 "Either provide a 'client' or use 'ainvoke()' with an 'async_client'."
             )
-        response = self._execute_search(self.client, query)
+        top_k_override = self._resolve_top_k_kwarg(kwargs)
+        response = self._execute_search(self.client, query, top_k=top_k_override)
         return self._map_results(response.get("results", []))
 
     async def _aget_relevant_documents(
@@ -601,15 +637,38 @@ class FoxNoseRetriever(BaseRetriever):
         query: str,
         *,
         run_manager: Any,
+        **kwargs: Any,
     ) -> list[Document]:
         """Async retrieval using AsyncFluxClient when available.
 
-        Falls back to the default ``run_in_executor`` behaviour provided by
-        :class:`~langchain_core.retrievers.BaseRetriever` when only a sync
-        client is available.
+        Falls back to running the sync method via ``run_in_executor`` when
+        only a sync client is available.  This preserves runtime kwargs
+        (e.g. ``top_k``) which ``super()._aget_relevant_documents`` does not
+        forward.
         """
+        top_k_override = self._resolve_top_k_kwarg(kwargs)
         if self.async_client is None:
-            # Fall back to sync-in-executor (BaseRetriever default)
-            return await super()._aget_relevant_documents(query, run_manager=run_manager)
-        response = await self._aexecute_search(self.async_client, query)
+            import functools
+
+            from langchain_core.runnables.config import run_in_executor
+
+            return await run_in_executor(
+                None,
+                functools.partial(
+                    self._get_relevant_documents,
+                    query,
+                    run_manager=run_manager.get_sync(),
+                    **kwargs,
+                ),
+            )
+        response = await self._aexecute_search(self.async_client, query, top_k=top_k_override)
         return self._map_results(response.get("results", []))
+
+    @staticmethod
+    def _resolve_top_k_kwarg(kwargs: dict[str, Any]) -> int | None:
+        """Extract ``top_k`` from kwargs, accepting ``k`` as an alias."""
+        top_k = kwargs.get("top_k")
+        k = kwargs.get("k")
+        if top_k is not None and k is not None:
+            raise ValueError("Cannot pass both 'top_k' and 'k'. Use one or the other.")
+        return top_k if top_k is not None else k

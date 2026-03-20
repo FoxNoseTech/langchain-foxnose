@@ -22,26 +22,35 @@ pip install -e ".[test,lint,docs]"
 ## Running Tests
 
 ```bash
-# All tests
-pytest tests/ --cov=langchain_foxnose
-
-# Unit tests only
-pytest tests/ --ignore=tests/integration
+# Unit tests (with coverage)
+make test
 
 # Specific test file
-pytest tests/test_search_builder.py
+pytest tests/unit_tests/test_search_builder.py
+
+# Integration tests (requires FoxNose credentials via env vars)
+make integration_test
 ```
+
+Integration tests require the following environment variables:
+- `FOXNOSE_BASE_URL`
+- `FOXNOSE_API_PREFIX`
+- `FOXNOSE_PUBLIC_KEY`
+- `FOXNOSE_SECRET_KEY`
+- `FOXNOSE_FOLDER_PATH`
+- `FOXNOSE_CONTENT_FIELD` (optional, defaults to `body`)
 
 ## Linting & Formatting
 
 ```bash
-# Check
-ruff check src/ tests/
-ruff format --check src/ tests/
+# Check (ruff + mypy)
+make lint
 
 # Auto-fix
-ruff check --fix src/ tests/
-ruff format src/ tests/
+make format
+
+# Type checking only
+make type
 ```
 
 ## Building Documentation
