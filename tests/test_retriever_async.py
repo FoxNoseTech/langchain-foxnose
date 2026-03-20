@@ -146,6 +146,43 @@ class TestRetrieverAsync:
         assert kwargs["where"] == where_filter
 
     @pytest.mark.asyncio
+    async def test_ainvoke_text_mode_with_offset_sort_where(
+        self, mock_async_flux_client: AsyncMock
+    ) -> None:
+        """Async text mode passes offset, where, and sort into body."""
+        retriever = FoxNoseRetriever(
+            async_client=mock_async_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="text",
+            where={"status__eq": "published"},
+            sort=["-title"],
+            search_kwargs={"offset": 5},
+        )
+        await retriever.ainvoke("query")
+        body = mock_async_flux_client.search.call_args[1]["body"]
+        assert body["offset"] == 5
+        assert body["where"] == {"status__eq": "published"}
+        assert body["sort"] == ["-title"]
+
+    @pytest.mark.asyncio
+    async def test_ainvoke_boosted_without_custom_embeddings(
+        self, mock_async_flux_client: AsyncMock
+    ) -> None:
+        """Async boosted mode without custom embeddings sends query as text."""
+        retriever = FoxNoseRetriever(
+            async_client=mock_async_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="vector_boosted",
+        )
+        await retriever.ainvoke("boosted query")
+        mock_async_flux_client.boosted_search.assert_called_once()
+        kwargs = mock_async_flux_client.boosted_search.call_args[1]
+        assert kwargs["query"] == "boosted query"
+        assert "field" not in kwargs
+
+    @pytest.mark.asyncio
     async def test_ainvoke_fallback_to_sync(
         self,
         mock_flux_client: MagicMock,
