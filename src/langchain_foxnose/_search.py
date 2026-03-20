@@ -1,7 +1,13 @@
-"""Pure function to build search request bodies for the FoxNose Flux _search endpoint."""
+"""Pure function to build search request bodies for the FoxNose Flux _search endpoint.
+
+.. deprecated:: 0.3.0
+    The retriever now uses SDK convenience methods directly.
+    This module will be removed in v0.4.0.
+"""
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 
@@ -21,6 +27,10 @@ def build_search_body(
     search_kwargs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a search request body for the FoxNose Flux ``_search`` endpoint.
+
+    .. deprecated:: 0.3.0
+        This function is deprecated and will be removed in v0.4.0.
+        The retriever now uses SDK convenience methods directly.
 
     This is a pure function with no side effects, making it easy to test
     independently of any client or retriever logic.
@@ -46,6 +56,12 @@ def build_search_body(
         A dictionary suitable for passing as ``body`` to
         ``FluxClient.search()`` / ``AsyncFluxClient.search()``.
     """
+    warnings.warn(
+        "build_search_body() is deprecated and will be removed in v0.4.0. "
+        "The retriever now uses SDK convenience methods directly.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     body: dict[str, Any] = {
         "search_mode": search_mode,
         "limit": top_k,

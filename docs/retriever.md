@@ -6,12 +6,16 @@
 
 ```
 FoxNoseRetriever
-  ├── build_search_body()   → constructs the _search request body
-  ├── FluxClient.search()   → sends the request to FoxNose
-  └── map_results_to_documents() → converts results to LangChain Documents
+  ├── _execute_search()           → dispatches to the appropriate SDK method
+  │   ├── client.vector_search()       (vector mode, auto embeddings)
+  │   ├── client.vector_field_search() (vector mode, custom embeddings)
+  │   ├── client.hybrid_search()       (hybrid mode)
+  │   ├── client.boosted_search()      (vector_boosted mode)
+  │   └── client.search()             (text mode)
+  └── map_results_to_documents()  → converts results to LangChain Documents
 ```
 
-Each component is a pure function (except the client call), making the retriever easy to test and extend.
+The retriever uses SDK v0.5.0 convenience methods for validated, type-safe search requests.
 
 ## Content Mapping
 
@@ -85,6 +89,72 @@ retriever = FoxNoseRetriever(
     include_sys_metadata=False,
 )
 ```
+
+## Custom Embeddings (Vector Field Search)
+
+When you have your own embedding model or pre-computed vectors, use `vector_field` together with `embeddings` or `query_vector` to search via the SDK's `vector_field_search()` method.
+
+### With a LangChain Embeddings model
+
+The retriever converts the query text into a vector at query time:
+
+```python
+from langchain_openai import OpenAIEmbeddings
+
+retriever = FoxNoseRetriever(
+    client=client,
+    folder_path="articles",
+    page_content_field="body",
+    search_mode="vector",
+    embeddings=OpenAIEmbeddings(model="text-embedding-3-small"),
+    vector_field="embedding",       # field name in FoxNose
+    similarity_threshold=0.75,
+)
+
+docs = retriever.invoke("How do I reset my password?")
+```
+
+!!! warning
+    The query text is sent to the embedding provider (e.g. OpenAI) on every invocation.
+
+### With a static query vector
+
+If you already have a vector, pass it directly:
+
+```python
+retriever = FoxNoseRetriever(
+    client=client,
+    folder_path="articles",
+    page_content_field="body",
+    search_mode="vector",
+    query_vector=[0.1, 0.2, ...],   # your pre-computed vector
+    vector_field="embedding",
+)
+```
+
+### With vector-boosted mode
+
+Custom embeddings also work in `vector_boosted` mode. The retriever sends both text and vector, using the vector for similarity boosting:
+
+```python
+retriever = FoxNoseRetriever(
+    client=client,
+    folder_path="articles",
+    page_content_field="body",
+    search_mode="vector_boosted",
+    embeddings=OpenAIEmbeddings(model="text-embedding-3-small"),
+    vector_field="embedding",
+    vector_boost_config={"boost_factor": 1.5},
+)
+```
+
+### Validation rules
+
+- `embeddings` and `query_vector` are mutually exclusive
+- `vector_field` is required when either is set
+- `vector_field` and `vector_fields` are mutually exclusive (`vector_field` for custom embeddings, `vector_fields` for auto-generated)
+- Custom embeddings are only supported in `vector` and `vector_boosted` modes
+- `query_vector` must be non-empty with finite values (no NaN/Inf)
 
 ## Sync vs Async
 
