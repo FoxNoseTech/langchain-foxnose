@@ -567,6 +567,21 @@ class TestRetrieverSync:
         assert body["limit"] == 50
         assert body["ignore_unknown_fields"] is True
 
+    def test_text_mode_with_offset_and_sort(self, mock_flux_client: MagicMock) -> None:
+        """Text mode passes offset and sort through to the body."""
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="text",
+            sort=["-_sys.created_at"],
+            search_kwargs={"offset": 10},
+        )
+        retriever.invoke("query")
+        body = mock_flux_client.search.call_args[1]["body"]
+        assert body["offset"] == 10
+        assert body["sort"] == ["-_sys.created_at"]
+
     def test_search_kwargs_where_override_text_mode(self, mock_flux_client: MagicMock) -> None:
         """search_kwargs where/sort override instance-level values in text mode."""
         override_where = {"$": {"all_of": [{"category__eq": "override"}]}}
