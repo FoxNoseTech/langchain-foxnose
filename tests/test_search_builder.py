@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
+import pytest
+
 from langchain_foxnose._search import build_search_body
+
+
+class TestBuildSearchBodyDeprecation:
+    """Deprecation warning."""
+
+    def test_emits_deprecation_warning(self) -> None:
+        with pytest.warns(DeprecationWarning, match=r"(?i)deprecated"):
+            build_search_body("hello", search_mode="text", top_k=5)
 
 
 class TestBuildSearchBodyTextMode:

@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Callable
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
 from pydantic import ConfigDict, Field, model_validator
 
 from langchain_foxnose._document_mapper import map_results_to_documents
-from langchain_foxnose._search import build_search_body
+from langchain_foxnose._validators import (
+    StrictHybridConfig,
+    StrictVectorBoostConfig,
+    split_search_kwargs,
+    validate_search_kwargs,
+)
 
 try:
     from foxnose_sdk.flux import AsyncFluxClient, FluxClient
@@ -98,7 +105,8 @@ class FoxNoseRetriever(BaseRetriever):
     """Typo-tolerance threshold for text search (``find_text.threshold``, 0-1)."""
 
     vector_fields: list[str] | None = None
-    """Fields for vector search (``vector_search.fields``)."""
+    """Fields for vector search with auto-generated embeddings
+    (``vector_search.fields``).  Mutually exclusive with ``vector_field``."""
 
     similarity_threshold: float | None = None
     """Minimum cosine similarity for vector search (0-1)."""
@@ -120,13 +128,40 @@ class FoxNoseRetriever(BaseRetriever):
     """Sort fields (prefix with ``-`` for descending)."""
 
     search_kwargs: dict[str, Any] = Field(default_factory=dict)
-    """Extra parameters merged into the search body (overrides other settings).
+    """Extra parameters merged into the search request.
+
+    Known keys like ``limit`` and ``offset`` are extracted as named
+    parameters; the rest are passed through ``**extra_body`` to the
+    SDK convenience methods.
 
     .. note::
 
-        Overriding ``"limit"`` here does **not** update ``vector_search.top_k``.
-        Only the outer ``limit`` changes.
+        Keys that conflict with ``SearchRequest`` fields (e.g.
+        ``"search_mode"``, ``"vector_search"``) are rejected at
+        validation time.
     """
+
+    # --- Custom embeddings (vector_field_search) ---
+    embeddings: Embeddings | None = None
+    """Optional LangChain Embeddings model.  When set together with
+    ``vector_field``, the retriever converts the query text into a vector
+    at query time via ``embeddings.embed_query()``.
+
+    .. warning::
+
+        The query text may be sent to a third-party embedding provider
+        (e.g. OpenAI) depending on the Embeddings implementation.
+    """
+
+    query_vector: list[float] | None = Field(default=None, repr=False)
+    """Pre-computed query vector for ``vector_field_search``.  When set
+    together with ``vector_field``, this static vector is used on every
+    search invocation.  Mutually exclusive with ``embeddings``."""
+
+    vector_field: str | None = None
+    """Single field name for custom-embedding vector search
+    (``vector_field_search``).  Required when ``embeddings`` or
+    ``query_vector`` is provided.  Mutually exclusive with ``vector_fields``."""
 
     @model_validator(mode="after")
     def _validate_config(self) -> FoxNoseRetriever:
@@ -186,12 +221,61 @@ class FoxNoseRetriever(BaseRetriever):
                 f"similarity_threshold must be between 0 and 1, got {self.similarity_threshold}."
             )
 
-        # search_kwargs must not override search_mode (creates inconsistent body)
-        if "search_mode" in self.search_kwargs:
+        # search_kwargs must not contain conflicting keys
+        validate_search_kwargs(self.search_kwargs)
+
+        # --- Custom embedding validation ---
+        has_embeddings = self.embeddings is not None
+        has_query_vector = self.query_vector is not None
+        has_vector_field = self.vector_field is not None
+
+        # embeddings and query_vector are mutually exclusive
+        if has_embeddings and has_query_vector:
             raise ValueError(
-                "Do not override 'search_mode' via 'search_kwargs'. "
-                "Set 'search_mode' directly instead."
+                "'embeddings' and 'query_vector' are mutually exclusive. Provide only one."
             )
+
+        # If embeddings or query_vector is set, vector_field is required
+        if (has_embeddings or has_query_vector) and not has_vector_field:
+            raise ValueError(
+                "'vector_field' is required when 'embeddings' or 'query_vector' is set."
+            )
+
+        # vector_field without a source is invalid
+        if has_vector_field and not has_embeddings and not has_query_vector:
+            raise ValueError("'vector_field' requires either 'embeddings' or 'query_vector'.")
+
+        # Custom embeddings only valid in vector / vector_boosted modes
+        if (has_embeddings or has_query_vector or has_vector_field) and self.search_mode not in (
+            "vector",
+            "vector_boosted",
+        ):
+            raise ValueError(
+                f"'embeddings', 'query_vector', and 'vector_field' are only "
+                f"supported in 'vector' and 'vector_boosted' search modes, "
+                f"got '{self.search_mode}'."
+            )
+
+        # vector_field and vector_fields are mutually exclusive
+        if has_vector_field and self.vector_fields is not None:
+            raise ValueError(
+                "'vector_field' and 'vector_fields' are mutually exclusive. "
+                "'vector_field' is for custom-embedding search, "
+                "'vector_fields' is for auto-generated embedding search."
+            )
+
+        # query_vector must be non-empty with finite values
+        if has_query_vector:
+            if len(self.query_vector) == 0:  # type: ignore[arg-type]
+                raise ValueError("'query_vector' must not be empty.")
+            if not all(math.isfinite(v) for v in self.query_vector):  # type: ignore[union-attr]
+                raise ValueError("All values in 'query_vector' must be finite (no NaN/Inf).")
+
+        # Validate config dicts through strict models (fail-fast on unknown keys)
+        if self.hybrid_config is not None:
+            StrictHybridConfig(**self.hybrid_config)
+        if self.vector_boost_config is not None:
+            StrictVectorBoostConfig(**self.vector_boost_config)
 
         return self
 
@@ -241,22 +325,248 @@ class FoxNoseRetriever(BaseRetriever):
             )
             return cls(client=c, folder_path=folder_path, **kwargs)
 
-    def _build_body(self, query: str) -> dict[str, Any]:
-        """Build the search request body."""
-        return build_search_body(
-            query,
-            search_mode=self.search_mode,
-            top_k=self.top_k,
-            search_fields=self.search_fields,
-            text_threshold=self.text_threshold,
-            vector_fields=self.vector_fields,
-            similarity_threshold=self.similarity_threshold,
-            where=self.where,
-            hybrid_config=self.hybrid_config,
-            vector_boost_config=self.vector_boost_config,
-            sort=self.sort,
-            search_kwargs=self.search_kwargs,
+    # --- Internal helpers ---
+
+    def _build_find_text(self, query: str) -> dict[str, Any]:
+        """Build the ``find_text`` dict for text / hybrid / boosted modes."""
+        find_text: dict[str, Any] = {"query": query}
+        if self.search_fields is not None:
+            find_text["fields"] = self.search_fields
+        if self.text_threshold is not None:
+            find_text["threshold"] = self.text_threshold
+        return find_text
+
+    def _build_extra_body(self) -> dict[str, Any]:
+        """Build ``**extra_body`` kwargs from where, sort, and search_kwargs."""
+        _named, extra = split_search_kwargs(self.search_kwargs)
+        if self.where is not None:
+            extra.setdefault("where", self.where)
+        if self.sort is not None:
+            extra.setdefault("sort", self.sort)
+        return extra
+
+    def _get_named_overrides(self) -> dict[str, Any]:
+        """Extract named parameter overrides from search_kwargs."""
+        named, _extra = split_search_kwargs(self.search_kwargs)
+        return named
+
+    def _resolve_query_vector(self, query: str) -> list[float]:
+        """Resolve the query vector for vector_field mode (sync)."""
+        if self.query_vector is not None:
+            return self.query_vector
+        if self.embeddings is not None:
+            return self.embeddings.embed_query(query)
+        raise ValueError(  # pragma: no cover — guarded by validator
+            "vector_field mode requires 'embeddings' or 'query_vector'."
         )
+
+    async def _aresolve_query_vector(self, query: str) -> list[float]:
+        """Resolve the query vector for vector_field mode (async)."""
+        if self.query_vector is not None:
+            return self.query_vector
+        if self.embeddings is not None:
+            return await self.embeddings.aembed_query(query)
+        raise ValueError(  # pragma: no cover — guarded by validator
+            "vector_field mode requires 'embeddings' or 'query_vector'."
+        )
+
+    def _execute_search(self, client: Any, query: str) -> dict[str, Any]:
+        """Dispatch to the appropriate SDK convenience method (sync)."""
+        extra = self._build_extra_body()
+        named = self._get_named_overrides()
+
+        if self.search_mode == "text":
+            return self._search_text(client, query, named, extra)
+        elif self.search_mode == "vector":
+            return self._search_vector(client, query, named, extra)
+        elif self.search_mode == "hybrid":
+            return self._search_hybrid(client, query, named, extra)
+        elif self.search_mode == "vector_boosted":
+            return self._search_boosted(client, query, named, extra)
+        else:  # pragma: no cover — guarded by validator
+            raise ValueError(f"Unknown search_mode: {self.search_mode}")
+
+    async def _aexecute_search(self, client: Any, query: str) -> dict[str, Any]:
+        """Dispatch to the appropriate SDK convenience method (async)."""
+        extra = self._build_extra_body()
+        named = self._get_named_overrides()
+
+        if self.search_mode == "text":
+            return await self._asearch_text(client, query, named, extra)
+        elif self.search_mode == "vector":
+            return await self._asearch_vector(client, query, named, extra)
+        elif self.search_mode == "hybrid":
+            return await self._asearch_hybrid(client, query, named, extra)
+        elif self.search_mode == "vector_boosted":
+            return await self._asearch_boosted(client, query, named, extra)
+        else:  # pragma: no cover
+            raise ValueError(f"Unknown search_mode: {self.search_mode}")
+
+    # --- Per-mode dispatch (sync) ---
+
+    def _search_text(self, client: Any, query: str, named: dict, extra: dict) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "search_mode": "text",
+            "find_text": self._build_find_text(query),
+            "limit": named.get("limit", self.top_k),
+        }
+        if "offset" in named:
+            body["offset"] = named["offset"]
+        if self.where is not None:
+            body["where"] = self.where
+        if self.sort is not None:
+            body["sort"] = self.sort
+        # Merge extra (may override instance-level where/sort from search_kwargs)
+        body.update(extra)
+        return client.search(self.folder_path, body=body)
+
+    def _search_vector(self, client: Any, query: str, named: dict, extra: dict) -> dict[str, Any]:
+        if self.vector_field is not None:
+            qv = self._resolve_query_vector(query)
+            return client.vector_field_search(
+                self.folder_path,
+                field=self.vector_field,
+                query_vector=qv,
+                top_k=self.top_k,
+                similarity_threshold=self.similarity_threshold,
+                limit=named.get("limit"),
+                offset=named.get("offset"),
+                **extra,
+            )
+        return client.vector_search(
+            self.folder_path,
+            query=query,
+            fields=self.vector_fields,
+            top_k=self.top_k,
+            similarity_threshold=self.similarity_threshold,
+            limit=named.get("limit"),
+            offset=named.get("offset"),
+            **extra,
+        )
+
+    def _search_hybrid(self, client: Any, query: str, named: dict, extra: dict) -> dict[str, Any]:
+        hc = StrictHybridConfig(**(self.hybrid_config or {}))
+        return client.hybrid_search(
+            self.folder_path,
+            query=query,
+            find_text=self._build_find_text(query),
+            fields=self.vector_fields,
+            top_k=self.top_k,
+            similarity_threshold=self.similarity_threshold,
+            vector_weight=hc.vector_weight,
+            text_weight=hc.text_weight,
+            rerank_results=hc.rerank_results,
+            limit=named.get("limit"),
+            offset=named.get("offset"),
+            **extra,
+        )
+
+    def _search_boosted(self, client: Any, query: str, named: dict, extra: dict) -> dict[str, Any]:
+        bc = StrictVectorBoostConfig(**(self.vector_boost_config or {}))
+        kwargs: dict[str, Any] = {
+            "find_text": self._build_find_text(query),
+            "top_k": self.top_k,
+            "similarity_threshold": self.similarity_threshold,
+            "boost_factor": bc.boost_factor,
+            "boost_similarity_threshold": bc.similarity_threshold,
+            "max_boost_results": bc.max_boost_results,
+            "limit": named.get("limit"),
+            "offset": named.get("offset"),
+        }
+        if self.vector_field is not None:
+            qv = self._resolve_query_vector(query)
+            kwargs["field"] = self.vector_field
+            kwargs["query_vector"] = qv
+        else:
+            kwargs["query"] = query
+        return client.boosted_search(self.folder_path, **kwargs, **extra)
+
+    # --- Per-mode dispatch (async) ---
+
+    async def _asearch_text(
+        self, client: Any, query: str, named: dict, extra: dict
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "search_mode": "text",
+            "find_text": self._build_find_text(query),
+            "limit": named.get("limit", self.top_k),
+        }
+        if "offset" in named:
+            body["offset"] = named["offset"]
+        if self.where is not None:
+            body["where"] = self.where
+        if self.sort is not None:
+            body["sort"] = self.sort
+        # Merge extra (may override instance-level where/sort from search_kwargs)
+        body.update(extra)
+        return await client.search(self.folder_path, body=body)
+
+    async def _asearch_vector(
+        self, client: Any, query: str, named: dict, extra: dict
+    ) -> dict[str, Any]:
+        if self.vector_field is not None:
+            qv = await self._aresolve_query_vector(query)
+            return await client.vector_field_search(
+                self.folder_path,
+                field=self.vector_field,
+                query_vector=qv,
+                top_k=self.top_k,
+                similarity_threshold=self.similarity_threshold,
+                limit=named.get("limit"),
+                offset=named.get("offset"),
+                **extra,
+            )
+        return await client.vector_search(
+            self.folder_path,
+            query=query,
+            fields=self.vector_fields,
+            top_k=self.top_k,
+            similarity_threshold=self.similarity_threshold,
+            limit=named.get("limit"),
+            offset=named.get("offset"),
+            **extra,
+        )
+
+    async def _asearch_hybrid(
+        self, client: Any, query: str, named: dict, extra: dict
+    ) -> dict[str, Any]:
+        hc = StrictHybridConfig(**(self.hybrid_config or {}))
+        return await client.hybrid_search(
+            self.folder_path,
+            query=query,
+            find_text=self._build_find_text(query),
+            fields=self.vector_fields,
+            top_k=self.top_k,
+            similarity_threshold=self.similarity_threshold,
+            vector_weight=hc.vector_weight,
+            text_weight=hc.text_weight,
+            rerank_results=hc.rerank_results,
+            limit=named.get("limit"),
+            offset=named.get("offset"),
+            **extra,
+        )
+
+    async def _asearch_boosted(
+        self, client: Any, query: str, named: dict, extra: dict
+    ) -> dict[str, Any]:
+        bc = StrictVectorBoostConfig(**(self.vector_boost_config or {}))
+        kwargs: dict[str, Any] = {
+            "find_text": self._build_find_text(query),
+            "top_k": self.top_k,
+            "similarity_threshold": self.similarity_threshold,
+            "boost_factor": bc.boost_factor,
+            "boost_similarity_threshold": bc.similarity_threshold,
+            "max_boost_results": bc.max_boost_results,
+            "limit": named.get("limit"),
+            "offset": named.get("offset"),
+        }
+        if self.vector_field is not None:
+            qv = await self._aresolve_query_vector(query)
+            kwargs["field"] = self.vector_field
+            kwargs["query_vector"] = qv
+        else:
+            kwargs["query"] = query
+        return await client.boosted_search(self.folder_path, **kwargs, **extra)
 
     def _map_results(self, results: list[dict[str, Any]]) -> list[Document]:
         """Map raw FoxNose results to LangChain Documents."""
@@ -283,8 +593,7 @@ class FoxNoseRetriever(BaseRetriever):
                 "Synchronous retrieval requires a 'client' (FluxClient). "
                 "Either provide a 'client' or use 'ainvoke()' with an 'async_client'."
             )
-        body = self._build_body(query)
-        response = self.client.search(self.folder_path, body=body)
+        response = self._execute_search(self.client, query)
         return self._map_results(response.get("results", []))
 
     async def _aget_relevant_documents(
@@ -302,6 +611,5 @@ class FoxNoseRetriever(BaseRetriever):
         if self.async_client is None:
             # Fall back to sync-in-executor (BaseRetriever default)
             return await super()._aget_relevant_documents(query, run_manager=run_manager)
-        body = self._build_body(query)
-        response = await self.async_client.search(self.folder_path, body=body)
+        response = await self._aexecute_search(self.async_client, query)
         return self._map_results(response.get("results", []))

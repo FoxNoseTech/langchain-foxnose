@@ -98,17 +98,25 @@ def sample_response() -> dict[str, Any]:
 
 @pytest.fixture()
 def mock_flux_client(sample_response: dict[str, Any]) -> MagicMock:
-    """Return a mocked FluxClient with a pre-configured search response."""
+    """Return a mocked FluxClient with pre-configured responses for all search methods."""
     client = MagicMock()
     client.search.return_value = sample_response
+    client.vector_search.return_value = sample_response
+    client.vector_field_search.return_value = sample_response
+    client.hybrid_search.return_value = sample_response
+    client.boosted_search.return_value = sample_response
     return client
 
 
 @pytest.fixture()
 def mock_async_flux_client(sample_response: dict[str, Any]) -> AsyncMock:
-    """Return a mocked AsyncFluxClient with a pre-configured search response."""
+    """Return a mocked AsyncFluxClient with pre-configured responses for all search methods."""
     client = AsyncMock()
     client.search.return_value = sample_response
+    client.vector_search.return_value = sample_response
+    client.vector_field_search.return_value = sample_response
+    client.hybrid_search.return_value = sample_response
+    client.boosted_search.return_value = sample_response
     return client
 
 
@@ -140,6 +148,10 @@ def mock_flux_client_with_list(sample_response: dict[str, Any]) -> MagicMock:
     """Return a mocked FluxClient with pre-configured search and list_resources."""
     client = MagicMock()
     client.search.return_value = sample_response
+    client.vector_search.return_value = sample_response
+    client.vector_field_search.return_value = sample_response
+    client.hybrid_search.return_value = sample_response
+    client.boosted_search.return_value = sample_response
     client.list_resources.return_value = _make_list_response()
     return client
 
@@ -149,5 +161,9 @@ def mock_async_flux_client_with_list(sample_response: dict[str, Any]) -> AsyncMo
     """Return a mocked AsyncFluxClient with pre-configured search and list_resources."""
     client = AsyncMock()
     client.search.return_value = sample_response
+    client.vector_search.return_value = sample_response
+    client.vector_field_search.return_value = sample_response
+    client.hybrid_search.return_value = sample_response
+    client.boosted_search.return_value = sample_response
     client.list_resources.return_value = _make_list_response()
     return client

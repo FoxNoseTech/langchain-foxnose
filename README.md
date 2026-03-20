@@ -18,6 +18,8 @@ LangChain integration for [FoxNose](https://foxnose.net?utm_source=github&utm_me
 pip install langchain-foxnose
 ```
 
+Requires `foxnose-sdk>=0.5.0` and `langchain-core>=0.3.0`.
+
 ## Quick Start
 
 ```python
@@ -51,6 +53,7 @@ for doc in docs:
 ## Features
 
 - **All search modes**: text, vector, hybrid, and vector-boosted search
+- **Custom embeddings**: bring your own LangChain `Embeddings` model or pre-computed vectors
 - **Bulk document loading**: cursor-based pagination with lazy loading for large folders
 - **Agent-ready search tool**: wrap any retriever as a tool for LLM agents
 - **Flexible content mapping**: single field, multiple fields, or custom mapper function
@@ -86,6 +89,36 @@ retriever = FoxNoseRetriever(
     page_content_field="body",
     search_mode="vector_boosted",
     vector_boost_config={"boost_factor": 1.3},
+)
+```
+
+## Custom Embeddings
+
+Use your own embedding model for vector search:
+
+```python
+from langchain_openai import OpenAIEmbeddings
+
+retriever = FoxNoseRetriever(
+    client=client,
+    folder_path="articles",
+    page_content_field="body",
+    search_mode="vector",
+    embeddings=OpenAIEmbeddings(model="text-embedding-3-small"),
+    vector_field="embedding",
+)
+```
+
+Or pass a pre-computed vector directly:
+
+```python
+retriever = FoxNoseRetriever(
+    client=client,
+    folder_path="articles",
+    page_content_field="body",
+    search_mode="vector",
+    query_vector=[0.1, 0.2, ...],
+    vector_field="embedding",
 )
 ```
 

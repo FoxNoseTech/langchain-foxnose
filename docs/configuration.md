@@ -54,18 +54,36 @@ Exactly one of these must be set:
 | `hybrid_config` | `dict` | `None` | Hybrid mode config (`vector_weight`, `text_weight`, `rerank_results`) |
 | `vector_boost_config` | `dict` | `None` | Boost config (`boost_factor`, `similarity_threshold`, `max_boost_results`) |
 | `sort` | `list[str]` | `None` | Sort fields (prefix `-` for descending) |
-| `search_kwargs` | `dict` | `{}` | Extra params merged into body (overrides) |
+| `search_kwargs` | `dict` | `{}` | Extra params passed to SDK methods (see below) |
 
 !!! note
-    Overriding `"limit"` via `search_kwargs` does **not** update `vector_search.top_k`.
-    Only the outer `limit` in the request body changes.
+    Known keys in `search_kwargs` like `limit` and `offset` are extracted as named
+    SDK method parameters. The rest are passed through `**extra_body`.
 
 !!! warning
-    `search_kwargs` must not contain `"search_mode"`. Set `search_mode` directly instead.
-    Overriding it via kwargs would create an inconsistent request body.
+    `search_kwargs` must not contain keys that conflict with `SearchRequest` fields:
+    `search_mode`, `vector_search`, `vector_field_search`, `hybrid_config`,
+    `vector_boost_config`, `find_text`, `find_phrase`.
 
 !!! note
     `text_threshold` and `similarity_threshold` are validated to be in the range 0-1.
+
+## Custom Embeddings
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `embeddings` | `Embeddings` | `None` | LangChain Embeddings model for converting query text to vectors |
+| `query_vector` | `list[float]` | `None` | Pre-computed static query vector |
+| `vector_field` | `str` | `None` | Field name for `vector_field_search` (required when `embeddings` or `query_vector` is set) |
+
+!!! warning
+    `embeddings` and `query_vector` are mutually exclusive.
+    `vector_field` and `vector_fields` are mutually exclusive.
+    Custom embeddings are only supported in `vector` and `vector_boosted` modes.
+
+!!! warning
+    When using `embeddings`, the query text may be sent to a third-party service (e.g. OpenAI)
+    depending on the Embeddings implementation.
 
 ## Search Modes
 
