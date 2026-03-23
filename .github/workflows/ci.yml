@@ -49,6 +49,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Verify required secrets
+        run: |
+          missing=""
+          for var in FOXNOSE_BASE_URL FOXNOSE_API_PREFIX FOXNOSE_PUBLIC_KEY FOXNOSE_SECRET_KEY FOXNOSE_FOLDER_PATH; do
+            eval "val=\$$var"
+            [ -z "$val" ] && missing="$missing $var"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secrets:$missing"
+            exit 1
+          fi
+        env:
+          FOXNOSE_BASE_URL: ${{ secrets.FOXNOSE_BASE_URL }}
+          FOXNOSE_API_PREFIX: ${{ secrets.FOXNOSE_API_PREFIX }}
+          FOXNOSE_PUBLIC_KEY: ${{ secrets.FOXNOSE_PUBLIC_KEY }}
+          FOXNOSE_SECRET_KEY: ${{ secrets.FOXNOSE_SECRET_KEY }}
+          FOXNOSE_FOLDER_PATH: ${{ secrets.FOXNOSE_FOLDER_PATH }}
       - run: pip install -e ".[test]"
       - name: Run integration tests
         run: pytest tests/integration_tests/

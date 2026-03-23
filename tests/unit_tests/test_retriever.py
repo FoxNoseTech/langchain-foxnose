@@ -820,6 +820,52 @@ class TestRetrieverRuntimeTopK:
         kwargs = mock_flux_client.vector_search.call_args[1]
         assert kwargs["top_k"] == 2
 
+    def test_vector_search_limit_defaults_to_top_k(self, mock_flux_client: MagicMock) -> None:
+        """Vector search should pass top_k as limit when limit is not set."""
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="vector",
+            top_k=3,
+        )
+        retriever.invoke("query")
+        kwargs = mock_flux_client.vector_search.call_args[1]
+        assert kwargs["limit"] == 3
+
+    def test_vector_search_runtime_top_k_overrides_limit(
+        self, mock_flux_client: MagicMock
+    ) -> None:
+        """Runtime top_k override should also be used as limit."""
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="vector",
+            top_k=10,
+        )
+        retriever.invoke("query", top_k=2)
+        kwargs = mock_flux_client.vector_search.call_args[1]
+        assert kwargs["top_k"] == 2
+        assert kwargs["limit"] == 2
+
+    def test_vector_field_search_limit_defaults_to_top_k(
+        self, mock_flux_client: MagicMock
+    ) -> None:
+        """vector_field_search should also default limit to top_k."""
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="vector",
+            vector_field="embedding",
+            query_vector=[0.1, 0.2, 0.3],
+            top_k=5,
+        )
+        retriever.invoke("query")
+        kwargs = mock_flux_client.vector_field_search.call_args[1]
+        assert kwargs["limit"] == 5
+
     def test_invoke_without_runtime_top_k_uses_default(self, mock_flux_client: MagicMock) -> None:
         retriever = FoxNoseRetriever(
             client=mock_flux_client,
@@ -856,3 +902,27 @@ class TestRetrieverRuntimeTopK:
             retriever.invoke("query", top_k=0)
         with pytest.raises(ValueError, match="must be an integer >= 1"):
             retriever.invoke("query", top_k=-1)
+
+    def test_invoke_runtime_k_alias(self, mock_flux_client: MagicMock) -> None:
+        """Runtime k=N should work as alias for top_k."""
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="hybrid",
+            top_k=10,
+        )
+        retriever.invoke("query", k=2)
+        kwargs = mock_flux_client.hybrid_search.call_args[1]
+        assert kwargs["top_k"] == 2
+
+    def test_invoke_runtime_k_and_top_k_conflict(self, mock_flux_client: MagicMock) -> None:
+        """Passing both k and top_k at runtime should raise ValueError."""
+        retriever = FoxNoseRetriever(
+            client=mock_flux_client,
+            folder_path="articles",
+            page_content_field="body",
+            search_mode="hybrid",
+        )
+        with pytest.raises(ValueError, match=r"(?i)cannot pass both"):
+            retriever.invoke("query", k=1, top_k=1)
