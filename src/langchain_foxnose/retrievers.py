@@ -459,7 +459,7 @@ class FoxNoseRetriever(BaseRetriever):
                 query_vector=qv,
                 top_k=top_k,
                 similarity_threshold=self.similarity_threshold,
-                limit=named.get("limit"),
+                limit=named.get("limit", top_k),
                 offset=named.get("offset"),
                 **extra,
             )
@@ -469,7 +469,7 @@ class FoxNoseRetriever(BaseRetriever):
             fields=self.vector_fields,
             top_k=top_k,
             similarity_threshold=self.similarity_threshold,
-            limit=named.get("limit"),
+            limit=named.get("limit", top_k),
             offset=named.get("offset"),
             **extra,
         )
@@ -546,7 +546,7 @@ class FoxNoseRetriever(BaseRetriever):
                 query_vector=qv,
                 top_k=top_k,
                 similarity_threshold=self.similarity_threshold,
-                limit=named.get("limit"),
+                limit=named.get("limit", top_k),
                 offset=named.get("offset"),
                 **extra,
             )
@@ -556,7 +556,7 @@ class FoxNoseRetriever(BaseRetriever):
             fields=self.vector_fields,
             top_k=top_k,
             similarity_threshold=self.similarity_threshold,
-            limit=named.get("limit"),
+            limit=named.get("limit", top_k),
             offset=named.get("offset"),
             **extra,
         )
@@ -630,7 +630,10 @@ class FoxNoseRetriever(BaseRetriever):
             )
         top_k_override = self._resolve_top_k_kwarg(kwargs)
         response = self._execute_search(self.client, query, top_k=top_k_override)
-        return self._map_results(response.get("results", []))
+        docs = self._map_results(response.get("results", []))
+        if top_k_override is not None:
+            docs = docs[:top_k_override]
+        return docs
 
     async def _aget_relevant_documents(
         self,
@@ -662,7 +665,10 @@ class FoxNoseRetriever(BaseRetriever):
                 ),
             )
         response = await self._aexecute_search(self.async_client, query, top_k=top_k_override)
-        return self._map_results(response.get("results", []))
+        docs = self._map_results(response.get("results", []))
+        if top_k_override is not None:
+            docs = docs[:top_k_override]
+        return docs
 
     @staticmethod
     def _resolve_top_k_kwarg(kwargs: dict[str, Any]) -> int | None:

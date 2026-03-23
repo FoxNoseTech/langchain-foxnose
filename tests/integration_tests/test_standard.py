@@ -43,13 +43,13 @@ class TestFoxNoseRetrieverStandard(RetrieversIntegrationTests):
             "client": client,
             "folder_path": os.environ["FOXNOSE_FOLDER_PATH"],
             "page_content_field": os.environ.get("FOXNOSE_CONTENT_FIELD", "body"),
-            "search_mode": "hybrid",
-            "top_k": 5,
+            "search_mode": "vector",
+            "similarity_threshold": 0.2,
         }
 
     @property
     def retriever_query_example(self) -> str:
-        return "test query"
+        return "password reset"
 
     @property
     def num_results_arg_name(self) -> str:
