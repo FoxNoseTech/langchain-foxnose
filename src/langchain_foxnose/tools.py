@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.tools import BaseTool, create_retriever_tool
 
@@ -22,7 +22,7 @@ def create_foxnose_tool(
         "Use this tool to find relevant information for answering questions."
     ),
     document_separator: str = "\n\n",
-    response_format: str = "content",
+    response_format: Literal["content", "content_and_artifact"] = "content",
     **retriever_kwargs: Any,
 ) -> BaseTool:
     """Create a LangChain tool for FoxNose search.
