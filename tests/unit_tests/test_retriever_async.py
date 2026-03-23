@@ -343,9 +343,7 @@ class TestRetrieverAsyncRuntimeTopK:
         kwargs = mock_async_flux_client.vector_field_search.call_args[1]
         assert kwargs["limit"] == 5
 
-    async def test_ainvoke_runtime_k_alias(
-        self, mock_async_flux_client: AsyncMock
-    ) -> None:
+    async def test_ainvoke_runtime_k_alias(self, mock_async_flux_client: AsyncMock) -> None:
         """Runtime k=N should work as alias for top_k in async path."""
         retriever = FoxNoseRetriever(
             async_client=mock_async_flux_client,
