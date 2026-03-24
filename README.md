@@ -5,6 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/FoxNoseTech/langchain-foxnose/actions/workflows/ci.yml/badge.svg)](https://github.com/FoxNoseTech/langchain-foxnose/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/FoxNoseTech/langchain-foxnose/branch/main/graph/badge.svg)](https://codecov.io/gh/FoxNoseTech/langchain-foxnose)
+[![Docs](https://img.shields.io/badge/docs-langchain--foxnose.readthedocs.io-blue)](https://langchain-foxnose.readthedocs.io/)
 
 LangChain integration for [FoxNose](https://foxnose.net?utm_source=github&utm_medium=repository&utm_campaign=langchain-foxnose) — the serverless knowledge platform purpose-built as the knowledge layer for RAG and AI agents.
 
@@ -209,13 +210,13 @@ docs = await retriever.ainvoke("search query")
 
 ## Documentation
 
-- [Getting Started](https://langchain-foxnose.readthedocs.io/getting-started/)
-- [Retriever](https://langchain-foxnose.readthedocs.io/retriever/)
-- [Document Loader](https://langchain-foxnose.readthedocs.io/loader/)
-- [Search Tool](https://langchain-foxnose.readthedocs.io/tool/)
-- [Configuration](https://langchain-foxnose.readthedocs.io/configuration/)
-- [Examples](https://langchain-foxnose.readthedocs.io/examples/)
-- [API Reference](https://langchain-foxnose.readthedocs.io/api-reference/)
+- [Getting Started](https://langchain-foxnose.readthedocs.io/en/latest/getting-started/)
+- [Retriever](https://langchain-foxnose.readthedocs.io/en/latest/retriever/)
+- [Document Loader](https://langchain-foxnose.readthedocs.io/en/latest/loader/)
+- [Search Tool](https://langchain-foxnose.readthedocs.io/en/latest/tool/)
+- [Configuration](https://langchain-foxnose.readthedocs.io/en/latest/configuration/)
+- [Examples](https://langchain-foxnose.readthedocs.io/en/latest/examples/)
+- [API Reference](https://langchain-foxnose.readthedocs.io/en/latest/api-reference/)
 - [FoxNose Documentation](https://foxnose.net/docs?utm_source=github&utm_medium=repository&utm_campaign=langchain-foxnose)
 
 ## License
