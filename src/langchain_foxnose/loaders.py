@@ -8,6 +8,7 @@ from typing import Any, Callable
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
 
+from langchain_foxnose._deprecation import warn_deprecated_field
 from langchain_foxnose._document_mapper import map_results_to_documents
 
 try:
@@ -20,7 +21,7 @@ except ImportError:  # pragma: no cover
 class FoxNoseLoader(BaseLoader):
     """LangChain document loader backed by FoxNose Flux ``list_resources``.
 
-    Iterates over all resources in a FoxNose folder with automatic
+    Iterates over all resources in a FoxNose collection with automatic
     cursor-based pagination.
 
     Example:
@@ -37,7 +38,7 @@ class FoxNoseLoader(BaseLoader):
             )
             loader = FoxNoseLoader(
                 client=client,
-                folder_path="knowledge-base",
+                collection_path="knowledge-base",
                 page_content_field="body",
             )
             docs = loader.load()
@@ -45,7 +46,9 @@ class FoxNoseLoader(BaseLoader):
     Args:
         client: Synchronous :class:`~foxnose_sdk.flux.FluxClient` instance.
         async_client: Asynchronous :class:`~foxnose_sdk.flux.AsyncFluxClient` instance.
-        folder_path: Folder path in FoxNose (e.g. ``"knowledge-base"``).
+        collection_path: Collection path in FoxNose (e.g. ``"knowledge-base"``).
+            Renamed from ``folder_path`` in 0.4.0; the legacy kwarg is still
+            accepted with a ``DeprecationWarning`` and will be removed in 1.0.
         page_content_field: Single ``data`` field whose value becomes ``page_content``.
         page_content_fields: Multiple ``data`` fields concatenated into ``page_content``.
         page_content_separator: Separator when using *page_content_fields*.
@@ -62,7 +65,8 @@ class FoxNoseLoader(BaseLoader):
         *,
         client: Any | None = None,
         async_client: Any | None = None,
-        folder_path: str,
+        collection_path: str | None = None,
+        folder_path: str | None = None,  # deprecated alias for collection_path
         page_content_field: str | None = None,
         page_content_fields: list[str] | None = None,
         page_content_separator: str = "\n\n",
@@ -73,6 +77,18 @@ class FoxNoseLoader(BaseLoader):
         params: dict[str, Any] | None = None,
         batch_size: int = 100,
     ) -> None:
+        # --- folder_path → collection_path migration (FOX-M0-01) ---
+        if folder_path is not None and collection_path is not None:
+            raise ValueError(
+                "Pass either folder_path (deprecated) or collection_path, not both."
+            )
+        if folder_path is not None:
+            warn_deprecated_field("folder_path", "collection_path")
+            collection_path = folder_path
+        if collection_path is None:
+            raise ValueError("collection_path is required.")
+        # --- end migration ---
+
         # At least one client
         if client is None and async_client is None:
             raise ValueError(
@@ -115,7 +131,7 @@ class FoxNoseLoader(BaseLoader):
 
         self.client = client
         self.async_client = async_client
-        self.folder_path = folder_path
+        self.collection_path = collection_path
         self.page_content_field = page_content_field
         self.page_content_fields = page_content_fields
         self.page_content_separator = page_content_separator
@@ -126,6 +142,11 @@ class FoxNoseLoader(BaseLoader):
         self.params: dict[str, Any] = params if params is not None else {}
         self.batch_size = batch_size
 
+    @property
+    def folder_path(self) -> str:
+        """Deprecated; alias for :attr:`collection_path`. Removed in 1.0."""
+        return self.collection_path
+
     @classmethod
     def from_client_params(
         cls,
@@ -133,7 +154,8 @@ class FoxNoseLoader(BaseLoader):
         base_url: str,
         api_prefix: str,
         auth: Any,
-        folder_path: str,
+        collection_path: str | None = None,
+        folder_path: str | None = None,  # deprecated alias for collection_path
         async_mode: bool = False,
         timeout: float = 15.0,
         **kwargs: Any,
@@ -144,7 +166,10 @@ class FoxNoseLoader(BaseLoader):
             base_url: FoxNose environment URL (e.g. ``"https://<env_key>.fxns.io"``).
             api_prefix: Flux API prefix.
             auth: An :class:`~foxnose_sdk.auth.AuthStrategy` instance.
-            folder_path: Folder path to load from.
+            collection_path: Collection path to load from. Required (or pass the
+                deprecated ``folder_path`` alias).
+            folder_path: Deprecated alias for ``collection_path``. Emits a
+                ``DeprecationWarning`` via ``__init__`` and will be removed in 1.0.
             async_mode: If ``True``, create an ``AsyncFluxClient`` instead.
             timeout: HTTP timeout in seconds.
             **kwargs: Additional arguments passed to :class:`FoxNoseLoader`.
@@ -155,6 +180,7 @@ class FoxNoseLoader(BaseLoader):
         from foxnose_sdk.flux import AsyncFluxClient as _AsyncFluxClient
         from foxnose_sdk.flux import FluxClient as _FluxClient
 
+        # Delegate the deprecation warning + both/neither validation to __init__.
         if async_mode:
             ac = _AsyncFluxClient(
                 base_url=base_url,
@@ -162,15 +188,24 @@ class FoxNoseLoader(BaseLoader):
                 auth=auth,
                 timeout=timeout,
             )
-            return cls(async_client=ac, folder_path=folder_path, **kwargs)
-        else:
-            c = _FluxClient(
-                base_url=base_url,
-                api_prefix=api_prefix,
-                auth=auth,
-                timeout=timeout,
+            return cls(
+                async_client=ac,
+                collection_path=collection_path,
+                folder_path=folder_path,
+                **kwargs,
             )
-            return cls(client=c, folder_path=folder_path, **kwargs)
+        c = _FluxClient(
+            base_url=base_url,
+            api_prefix=api_prefix,
+            auth=auth,
+            timeout=timeout,
+        )
+        return cls(
+            client=c,
+            collection_path=collection_path,
+            folder_path=folder_path,
+            **kwargs,
+        )
 
     def _map_results(self, results: list[dict[str, Any]]) -> list[Document]:
         """Map raw FoxNose results to LangChain Documents."""
@@ -206,7 +241,7 @@ class FoxNoseLoader(BaseLoader):
             if cursor is not None:
                 request_params["next"] = cursor
 
-            response = self.client.list_resources(self.folder_path, params=request_params)
+            response = self.client.list_resources(self.collection_path, params=request_params)
             results = response.get("results", [])
             documents = self._map_results(results)
             yield from documents
@@ -237,7 +272,7 @@ class FoxNoseLoader(BaseLoader):
                 request_params["next"] = cursor
 
             response = await self.async_client.list_resources(
-                self.folder_path, params=request_params
+                self.collection_path, params=request_params
             )
             results = response.get("results", [])
             documents = self._map_results(results)
