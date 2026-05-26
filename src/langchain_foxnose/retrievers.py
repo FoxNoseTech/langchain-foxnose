@@ -11,6 +11,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
 from pydantic import ConfigDict, Field, model_validator
 
+from langchain_foxnose._deprecation import warn_deprecated_field
 from langchain_foxnose._document_mapper import map_results_to_documents
 from langchain_foxnose._validators import (
     StrictHybridConfig,
@@ -46,7 +47,7 @@ class FoxNoseRetriever(BaseRetriever):
             )
             retriever = FoxNoseRetriever(
                 client=client,
-                folder_path="knowledge-base",
+                collection_path="knowledge-base",
                 page_content_field="body",
                 search_mode="hybrid",
                 top_k=5,
@@ -54,7 +55,7 @@ class FoxNoseRetriever(BaseRetriever):
             docs = retriever.invoke("How do I reset my password?")
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
 
     # --- Client injection ---
     client: Any | None = None
@@ -64,8 +65,13 @@ class FoxNoseRetriever(BaseRetriever):
     """Asynchronous :class:`~foxnose_sdk.flux.AsyncFluxClient` instance."""
 
     # --- Required ---
-    folder_path: str
-    """Folder path in FoxNose (e.g. ``"knowledge-base"``)."""
+    collection_path: str
+    """Collection path in FoxNose (e.g. ``"knowledge-base"``).
+
+    Renamed from ``folder_path`` in 0.4.0. The legacy ``folder_path`` kwarg is
+    still accepted via :meth:`_migrate_folder_path` and the read-only
+    :attr:`folder_path` property — both will be removed in 1.0.
+    """
 
     # --- Content mapping (exactly one required) ---
     page_content_field: str | None = None
@@ -174,6 +180,34 @@ class FoxNoseRetriever(BaseRetriever):
                     raise ValueError("Cannot pass both 'top_k' and 'k'. Use one or the other.")
                 data["top_k"] = k_val
         return data
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_folder_path(cls, data: Any) -> Any:
+        """Accept the legacy ``folder_path`` kwarg, map to ``collection_path``.
+
+        Renamed in 0.4.0; the legacy name will be removed in 1.0. Passing both
+        kwargs at once is a ValueError. ``folder_path=None`` is treated as
+        absent (parity with FoxNoseLoader).
+        """
+        if not isinstance(data, dict):
+            return data
+        legacy = data.get("folder_path")
+        if legacy is None:
+            data.pop("folder_path", None)
+            return data
+        if data.get("collection_path") is not None:
+            raise ValueError(
+                "Pass either folder_path (deprecated) or collection_path, not both."
+            )
+        warn_deprecated_field("folder_path", "collection_path")
+        data["collection_path"] = data.pop("folder_path")
+        return data
+
+    @property
+    def folder_path(self) -> str:
+        """Deprecated; alias for :attr:`collection_path`."""
+        return self.collection_path
 
     @model_validator(mode="after")
     def _validate_config(self) -> FoxNoseRetriever:
@@ -298,7 +332,8 @@ class FoxNoseRetriever(BaseRetriever):
         base_url: str,
         api_prefix: str,
         auth: Any,
-        folder_path: str,
+        collection_path: str | None = None,
+        folder_path: str | None = None,  # deprecated alias for collection_path
         async_mode: bool = False,
         timeout: float = 15.0,
         **kwargs: Any,
@@ -309,7 +344,11 @@ class FoxNoseRetriever(BaseRetriever):
             base_url: FoxNose environment URL (e.g. ``"https://<env_key>.fxns.io"``).
             api_prefix: Flux API prefix.
             auth: An :class:`~foxnose_sdk.auth.AuthStrategy` instance.
-            folder_path: Folder path to search.
+            collection_path: Collection path to search. Required (or pass the
+                deprecated ``folder_path`` alias).
+            folder_path: Deprecated alias for ``collection_path``. Emits a
+                ``DeprecationWarning`` via the constructor's model_validator
+                and will be removed in 1.0.
             async_mode: If ``True``, create an ``AsyncFluxClient`` instead.
             timeout: HTTP timeout in seconds.
             **kwargs: Additional arguments passed to :class:`FoxNoseRetriever`.
@@ -320,6 +359,14 @@ class FoxNoseRetriever(BaseRetriever):
         from foxnose_sdk.flux import AsyncFluxClient as _AsyncFluxClient
         from foxnose_sdk.flux import FluxClient as _FluxClient
 
+        # Delegate folder_path → collection_path migration + warning to __init__'s
+        # model_validator so the contract stays in one place.
+        path_kwargs: dict[str, Any] = {}
+        if collection_path is not None:
+            path_kwargs["collection_path"] = collection_path
+        if folder_path is not None:
+            path_kwargs["folder_path"] = folder_path
+
         if async_mode:
             ac = _AsyncFluxClient(
                 base_url=base_url,
@@ -327,7 +374,7 @@ class FoxNoseRetriever(BaseRetriever):
                 auth=auth,
                 timeout=timeout,
             )
-            return cls(async_client=ac, folder_path=folder_path, **kwargs)
+            return cls(async_client=ac, **path_kwargs, **kwargs)
         else:
             c = _FluxClient(
                 base_url=base_url,
@@ -335,7 +382,7 @@ class FoxNoseRetriever(BaseRetriever):
                 auth=auth,
                 timeout=timeout,
             )
-            return cls(client=c, folder_path=folder_path, **kwargs)
+            return cls(client=c, **path_kwargs, **kwargs)
 
     # --- Internal helpers ---
 
@@ -446,7 +493,7 @@ class FoxNoseRetriever(BaseRetriever):
             body["sort"] = self.sort
         # Merge extra (may override instance-level where/sort from search_kwargs)
         body.update(extra)
-        return client.search(self.folder_path, body=body)
+        return client.search(self.collection_path, body=body)
 
     def _search_vector(
         self, client: Any, query: str, named: dict, extra: dict, top_k: int
@@ -454,7 +501,7 @@ class FoxNoseRetriever(BaseRetriever):
         if self.vector_field is not None:
             qv = self._resolve_query_vector(query)
             return client.vector_field_search(
-                self.folder_path,
+                self.collection_path,
                 field=self.vector_field,
                 query_vector=qv,
                 top_k=top_k,
@@ -464,7 +511,7 @@ class FoxNoseRetriever(BaseRetriever):
                 **extra,
             )
         return client.vector_search(
-            self.folder_path,
+            self.collection_path,
             query=query,
             fields=self.vector_fields,
             top_k=top_k,
@@ -479,7 +526,7 @@ class FoxNoseRetriever(BaseRetriever):
     ) -> dict[str, Any]:
         hc = StrictHybridConfig(**(self.hybrid_config or {}))
         return client.hybrid_search(
-            self.folder_path,
+            self.collection_path,
             query=query,
             find_text=self._build_find_text(query),
             fields=self.vector_fields,
@@ -513,7 +560,7 @@ class FoxNoseRetriever(BaseRetriever):
             kwargs["query_vector"] = qv
         else:
             kwargs["query"] = query
-        return client.boosted_search(self.folder_path, **kwargs, **extra)
+        return client.boosted_search(self.collection_path, **kwargs, **extra)
 
     # --- Per-mode dispatch (async) ---
 
@@ -533,7 +580,7 @@ class FoxNoseRetriever(BaseRetriever):
             body["sort"] = self.sort
         # Merge extra (may override instance-level where/sort from search_kwargs)
         body.update(extra)
-        return await client.search(self.folder_path, body=body)
+        return await client.search(self.collection_path, body=body)
 
     async def _asearch_vector(
         self, client: Any, query: str, named: dict, extra: dict, top_k: int
@@ -541,7 +588,7 @@ class FoxNoseRetriever(BaseRetriever):
         if self.vector_field is not None:
             qv = await self._aresolve_query_vector(query)
             return await client.vector_field_search(
-                self.folder_path,
+                self.collection_path,
                 field=self.vector_field,
                 query_vector=qv,
                 top_k=top_k,
@@ -551,7 +598,7 @@ class FoxNoseRetriever(BaseRetriever):
                 **extra,
             )
         return await client.vector_search(
-            self.folder_path,
+            self.collection_path,
             query=query,
             fields=self.vector_fields,
             top_k=top_k,
@@ -566,7 +613,7 @@ class FoxNoseRetriever(BaseRetriever):
     ) -> dict[str, Any]:
         hc = StrictHybridConfig(**(self.hybrid_config or {}))
         return await client.hybrid_search(
-            self.folder_path,
+            self.collection_path,
             query=query,
             find_text=self._build_find_text(query),
             fields=self.vector_fields,
@@ -600,7 +647,7 @@ class FoxNoseRetriever(BaseRetriever):
             kwargs["query_vector"] = qv
         else:
             kwargs["query"] = query
-        return await client.boosted_search(self.folder_path, **kwargs, **extra)
+        return await client.boosted_search(self.collection_path, **kwargs, **extra)
 
     def _map_results(self, results: list[dict[str, Any]]) -> list[Document]:
         """Map raw FoxNose results to LangChain Documents."""

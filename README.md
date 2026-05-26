@@ -19,7 +19,7 @@ LangChain integration for [FoxNose](https://foxnose.net?utm_source=github&utm_me
 pip install langchain-foxnose
 ```
 
-Requires `foxnose-sdk>=0.5.0` and `langchain-core>=0.3.0`.
+Requires `foxnose-sdk>=0.6.0` and `langchain-core>=0.3.0`.
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ client = FluxClient(
 # Create the retriever
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     search_mode="hybrid",
     top_k=5,
@@ -50,6 +50,11 @@ for doc in docs:
     print(doc.page_content)
     print(doc.metadata)
 ```
+
+> **Note (0.4.0):** The `folder_path` kwarg on `FoxNoseRetriever`, `FoxNoseLoader`,
+> and `create_foxnose_tool` is deprecated in favor of `collection_path`. The
+> legacy kwarg still works but emits a `DeprecationWarning`; it will be removed
+> in 1.0. Requires `foxnose-sdk>=0.6.0`.
 
 ## Features
 
@@ -69,7 +74,7 @@ for doc in docs:
 # Pure vector (semantic) search
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector",
 )
@@ -77,7 +82,7 @@ retriever = FoxNoseRetriever(
 # Hybrid search (text + vector)
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="hybrid",
     hybrid_config={"vector_weight": 0.6, "text_weight": 0.4},
@@ -86,7 +91,7 @@ retriever = FoxNoseRetriever(
 # Text search with vector boost
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector_boosted",
     vector_boost_config={"boost_factor": 1.3},
@@ -102,7 +107,7 @@ from langchain_openai import OpenAIEmbeddings
 
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector",
     embeddings=OpenAIEmbeddings(model="text-embedding-3-small"),
@@ -115,7 +120,7 @@ Or pass a pre-computed vector directly:
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector",
     query_vector=[0.1, 0.2, ...],
@@ -128,7 +133,7 @@ retriever = FoxNoseRetriever(
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     where={
         "$": {
@@ -143,14 +148,14 @@ retriever = FoxNoseRetriever(
 
 ## Document Loader
 
-`FoxNoseLoader` iterates over all resources in a folder using cursor-based pagination. Use it to bulk-load documents for indexing, batch processing, or seeding a local vector store.
+`FoxNoseLoader` iterates over all resources in a collection using cursor-based pagination. Use it to bulk-load documents for indexing, batch processing, or seeding a local vector store.
 
 ```python
 from langchain_foxnose import FoxNoseLoader
 
 loader = FoxNoseLoader(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     batch_size=50,
 )
@@ -172,7 +177,7 @@ from langchain_foxnose import create_foxnose_tool
 
 tool = create_foxnose_tool(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     name="kb_search",
     description="Search the knowledge base for relevant information.",
@@ -201,7 +206,7 @@ async_client = AsyncFluxClient(
 
 retriever = FoxNoseRetriever(
     async_client=async_client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
 )
 
