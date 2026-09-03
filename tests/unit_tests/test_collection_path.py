@@ -7,8 +7,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from langchain_foxnose import FoxNoseLoader, FoxNoseRetriever, create_foxnose_tool
-from langchain_foxnose import _deprecation
+from langchain_foxnose import (
+    FoxNoseLoader,
+    FoxNoseRetriever,
+    _deprecation,
+    create_foxnose_tool,
+)
 
 
 def _mock_client() -> MagicMock:
@@ -219,8 +223,6 @@ def test_loader_treats_folder_path_none_as_absent() -> None:
 
 def test_retriever_from_client_params_accepts_collection_path(monkeypatch) -> None:
     """The factory must accept the canonical collection_path kwarg."""
-    from langchain_foxnose import retrievers as retrievers_mod
-
     fake_client = _mock_client()
 
     class _FakeClientCls:

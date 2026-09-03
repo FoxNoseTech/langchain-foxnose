@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from typing import Any, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
+from typing import Any
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
@@ -79,9 +79,7 @@ class FoxNoseLoader(BaseLoader):
     ) -> None:
         # --- folder_path → collection_path migration (FOX-M0-01) ---
         if folder_path is not None and collection_path is not None:
-            raise ValueError(
-                "Pass either folder_path (deprecated) or collection_path, not both."
-            )
+            raise ValueError("Pass either folder_path (deprecated) or collection_path, not both.")
         if folder_path is not None:
             warn_deprecated_field("folder_path", "collection_path")
             collection_path = folder_path

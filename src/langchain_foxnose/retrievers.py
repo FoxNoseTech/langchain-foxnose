@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
@@ -197,9 +198,7 @@ class FoxNoseRetriever(BaseRetriever):
             data.pop("folder_path", None)
             return data
         if data.get("collection_path") is not None:
-            raise ValueError(
-                "Pass either folder_path (deprecated) or collection_path, not both."
-            )
+            raise ValueError("Pass either folder_path (deprecated) or collection_path, not both.")
         warn_deprecated_field("folder_path", "collection_path")
         data["collection_path"] = data.pop("folder_path")
         return data
