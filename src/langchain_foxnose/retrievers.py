@@ -145,7 +145,24 @@ class FoxNoseRetriever(BaseRetriever):
 
         Keys that conflict with ``SearchRequest`` fields (e.g.
         ``"search_mode"``, ``"vector_search"``) are rejected at
-        validation time.
+        validation time, as are query-string keys (``"truncate_text"``,
+        ``"query_params"``) — use the dedicated parameters below.
+    """
+
+    query_params: dict[str, Any] | None = None
+    """Extra query-string parameters forwarded to the FoxNose ``_search``
+    endpoint (e.g. ``{"truncate_text": 200}``).
+
+    These are *query* parameters, not body fields — passing them through
+    ``search_kwargs`` is rejected at validation time.
+    """
+
+    truncate_text: int | None = None
+    """Cap the length of every ``text``-typed field in the response, in
+    characters.  Sent as the ``truncate_text`` query parameter.  Must be >= 1.
+
+    Useful for RAG: it bounds the size of ``page_content`` server-side instead
+    of shipping full documents over the wire.
     """
 
     # --- Custom embeddings (vector_field_search) ---
@@ -265,6 +282,15 @@ class FoxNoseRetriever(BaseRetriever):
             raise ValueError(
                 f"similarity_threshold must be between 0 and 1, got {self.similarity_threshold}."
             )
+
+        # Query-string parameters
+        if self.truncate_text is not None:
+            if self.truncate_text < 1:
+                raise ValueError(f"truncate_text must be >= 1, got {self.truncate_text}.")
+            if self.query_params is not None and "truncate_text" in self.query_params:
+                raise ValueError(
+                    "truncate_text is set both directly and inside query_params. Set only one."
+                )
 
         # search_kwargs must not contain conflicting keys
         validate_search_kwargs(self.search_kwargs)
@@ -403,6 +429,13 @@ class FoxNoseRetriever(BaseRetriever):
             extra.setdefault("sort", self.sort)
         return extra
 
+    def _build_query_params(self) -> dict[str, Any] | None:
+        """Build the query-string params mapping, or ``None`` when empty."""
+        params: dict[str, Any] = dict(self.query_params) if self.query_params else {}
+        if self.truncate_text is not None:
+            params["truncate_text"] = self.truncate_text
+        return params or None
+
     def _get_named_overrides(self) -> dict[str, Any]:
         """Extract named parameter overrides from search_kwargs."""
         named, _extra = split_search_kwargs(self.search_kwargs)
@@ -492,7 +525,7 @@ class FoxNoseRetriever(BaseRetriever):
             body["sort"] = self.sort
         # Merge extra (may override instance-level where/sort from search_kwargs)
         body.update(extra)
-        return client.search(self.collection_path, body=body)
+        return client.search(self.collection_path, body=body, params=self._build_query_params())
 
     def _search_vector(
         self, client: Any, query: str, named: dict, extra: dict, top_k: int
@@ -507,6 +540,7 @@ class FoxNoseRetriever(BaseRetriever):
                 similarity_threshold=self.similarity_threshold,
                 limit=named.get("limit", top_k),
                 offset=named.get("offset"),
+                query_params=self._build_query_params(),
                 **extra,
             )
         return client.vector_search(
@@ -517,6 +551,7 @@ class FoxNoseRetriever(BaseRetriever):
             similarity_threshold=self.similarity_threshold,
             limit=named.get("limit", top_k),
             offset=named.get("offset"),
+            query_params=self._build_query_params(),
             **extra,
         )
 
@@ -536,6 +571,7 @@ class FoxNoseRetriever(BaseRetriever):
             rerank_results=hc.rerank_results,
             limit=named.get("limit"),
             offset=named.get("offset"),
+            query_params=self._build_query_params(),
             **extra,
         )
 
@@ -552,6 +588,7 @@ class FoxNoseRetriever(BaseRetriever):
             "max_boost_results": bc.max_boost_results,
             "limit": named.get("limit"),
             "offset": named.get("offset"),
+            "query_params": self._build_query_params(),
         }
         if self.vector_field is not None:
             qv = self._resolve_query_vector(query)
@@ -579,7 +616,9 @@ class FoxNoseRetriever(BaseRetriever):
             body["sort"] = self.sort
         # Merge extra (may override instance-level where/sort from search_kwargs)
         body.update(extra)
-        return await client.search(self.collection_path, body=body)
+        return await client.search(
+            self.collection_path, body=body, params=self._build_query_params()
+        )
 
     async def _asearch_vector(
         self, client: Any, query: str, named: dict, extra: dict, top_k: int
@@ -594,6 +633,7 @@ class FoxNoseRetriever(BaseRetriever):
                 similarity_threshold=self.similarity_threshold,
                 limit=named.get("limit", top_k),
                 offset=named.get("offset"),
+                query_params=self._build_query_params(),
                 **extra,
             )
         return await client.vector_search(
@@ -604,6 +644,7 @@ class FoxNoseRetriever(BaseRetriever):
             similarity_threshold=self.similarity_threshold,
             limit=named.get("limit", top_k),
             offset=named.get("offset"),
+            query_params=self._build_query_params(),
             **extra,
         )
 
@@ -623,6 +664,7 @@ class FoxNoseRetriever(BaseRetriever):
             rerank_results=hc.rerank_results,
             limit=named.get("limit"),
             offset=named.get("offset"),
+            query_params=self._build_query_params(),
             **extra,
         )
 
@@ -639,6 +681,7 @@ class FoxNoseRetriever(BaseRetriever):
             "max_boost_results": bc.max_boost_results,
             "limit": named.get("limit"),
             "offset": named.get("offset"),
+            "query_params": self._build_query_params(),
         }
         if self.vector_field is not None:
             qv = await self._aresolve_query_vector(query)
