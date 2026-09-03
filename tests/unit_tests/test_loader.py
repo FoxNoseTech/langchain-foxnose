@@ -340,3 +340,61 @@ class TestLoaderAsync:
         )
         docs = [doc async for doc in loader.alazy_load()]
         assert docs == []
+
+
+class TestLoaderTruncateText:
+    """The `truncate_text` query parameter (SDK 0.8.0)."""
+
+    def test_rejects_zero(self, mock_flux_client_with_list: MagicMock) -> None:
+        with pytest.raises(ValueError, match="truncate_text must be >= 1"):
+            FoxNoseLoader(
+                client=mock_flux_client_with_list,
+                collection_path="articles",
+                page_content_field="body",
+                truncate_text=0,
+            )
+
+    def test_rejects_duplicate_in_params(self, mock_flux_client_with_list: MagicMock) -> None:
+        with pytest.raises(ValueError, match="truncate_text is set both"):
+            FoxNoseLoader(
+                client=mock_flux_client_with_list,
+                collection_path="articles",
+                page_content_field="body",
+                truncate_text=100,
+                params={"truncate_text": 200},
+            )
+
+    def test_forwarded_to_list_resources(self, mock_flux_client_with_list: MagicMock) -> None:
+        FoxNoseLoader(
+            client=mock_flux_client_with_list,
+            collection_path="articles",
+            page_content_field="body",
+            truncate_text=150,
+        ).load()
+        params = mock_flux_client_with_list.list_resources.call_args.kwargs["params"]
+        assert params["truncate_text"] == 150
+        assert params["limit"] == 100
+
+    async def test_forwarded_async(self, mock_async_flux_client_with_list: Any) -> None:
+        loader = FoxNoseLoader(
+            async_client=mock_async_flux_client_with_list,
+            collection_path="articles",
+            page_content_field="body",
+            truncate_text=150,
+        )
+        [doc async for doc in loader.alazy_load()]
+        params = mock_async_flux_client_with_list.list_resources.call_args.kwargs["params"]
+        assert params["truncate_text"] == 150
+
+    def test_params_passthrough_still_works_alone(
+        self, mock_flux_client_with_list: MagicMock
+    ) -> None:
+        """params is a documented raw query-string passthrough; keep it working."""
+        FoxNoseLoader(
+            client=mock_flux_client_with_list,
+            collection_path="articles",
+            page_content_field="body",
+            params={"truncate_text": 90},
+        ).load()
+        params = mock_flux_client_with_list.list_resources.call_args.kwargs["params"]
+        assert params["truncate_text"] == 90

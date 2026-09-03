@@ -57,6 +57,10 @@ class FoxNoseLoader(BaseLoader):
         exclude_metadata_fields: Blacklist of ``data`` fields to exclude from metadata.
         include_sys_metadata: Whether to include ``_sys`` fields in metadata.
         params: Query parameters forwarded to ``list_resources``.
+        truncate_text: Cap the length of every ``text``-typed field in the
+            response, in characters. Sent as the ``truncate_text`` query
+            parameter. Must be >= 1. Prefer this over a ``truncate_text`` key
+            inside *params*; setting both raises.
         batch_size: Page size for ``list_resources`` calls (must be >= 1).
     """
 
@@ -75,6 +79,7 @@ class FoxNoseLoader(BaseLoader):
         exclude_metadata_fields: list[str] | None = None,
         include_sys_metadata: bool = True,
         params: dict[str, Any] | None = None,
+        truncate_text: int | None = None,
         batch_size: int = 100,
     ) -> None:
         # --- folder_path → collection_path migration (FOX-M0-01) ---
@@ -127,6 +132,15 @@ class FoxNoseLoader(BaseLoader):
         if batch_size < 1:
             raise ValueError(f"batch_size must be >= 1, got {batch_size}.")
 
+        # truncate_text must be positive and unambiguous
+        if truncate_text is not None:
+            if truncate_text < 1:
+                raise ValueError(f"truncate_text must be >= 1, got {truncate_text}.")
+            if params is not None and "truncate_text" in params:
+                raise ValueError(
+                    "truncate_text is set both directly and inside params. Set only one."
+                )
+
         self.client = client
         self.async_client = async_client
         self.collection_path = collection_path
@@ -139,6 +153,7 @@ class FoxNoseLoader(BaseLoader):
         self.include_sys_metadata = include_sys_metadata
         self.params: dict[str, Any] = params if params is not None else {}
         self.batch_size = batch_size
+        self.truncate_text = truncate_text
 
     @property
     def folder_path(self) -> str:
@@ -218,6 +233,15 @@ class FoxNoseLoader(BaseLoader):
             include_sys_metadata=self.include_sys_metadata,
         )
 
+    def _build_request_params(self, cursor: str | None) -> dict[str, Any]:
+        """Build the ``list_resources`` query params for one page."""
+        request_params: dict[str, Any] = {**self.params, "limit": self.batch_size}
+        if self.truncate_text is not None:
+            request_params["truncate_text"] = self.truncate_text
+        if cursor is not None:
+            request_params["next"] = cursor
+        return request_params
+
     def lazy_load(self) -> Iterator[Document]:
         """Lazily load documents from FoxNose with cursor-based pagination.
 
@@ -235,9 +259,7 @@ class FoxNoseLoader(BaseLoader):
 
         cursor: str | None = None
         while True:
-            request_params: dict[str, Any] = {**self.params, "limit": self.batch_size}
-            if cursor is not None:
-                request_params["next"] = cursor
+            request_params = self._build_request_params(cursor)
 
             response = self.client.list_resources(self.collection_path, params=request_params)
             results = response.get("results", [])
@@ -265,9 +287,7 @@ class FoxNoseLoader(BaseLoader):
 
         cursor: str | None = None
         while True:
-            request_params: dict[str, Any] = {**self.params, "limit": self.batch_size}
-            if cursor is not None:
-                request_params["next"] = cursor
+            request_params = self._build_request_params(cursor)
 
             response = await self.async_client.list_resources(
                 self.collection_path, params=request_params
