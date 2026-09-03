@@ -156,6 +156,46 @@ retriever = FoxNoseRetriever(
 - Custom embeddings are only supported in `vector` and `vector_boosted` modes
 - `query_vector` must be non-empty with finite values (no NaN/Inf)
 
+## Limiting Response Size
+
+`truncate_text` caps the length of every `text`-typed field in the response,
+server-side. For RAG this bounds `page_content` without shipping whole
+documents over the wire:
+
+```python
+retriever = FoxNoseRetriever(
+    client=client,
+    collection_path="articles",
+    page_content_field="body",
+    truncate_text=500,
+)
+```
+
+`query_params` forwards any other query-string parameter to the `_search`
+endpoint:
+
+```python
+retriever = FoxNoseRetriever(
+    client=client,
+    collection_path="articles",
+    page_content_field="body",
+    query_params={"truncate_text": 500},
+)
+```
+
+Set `truncate_text` **or** a `truncate_text` key inside `query_params`, never
+both — that raises. Both must be >= 1.
+
+!!! warning "These are query parameters, not body fields"
+
+    `search_kwargs` is a request-*body* passthrough, so
+    `search_kwargs={"truncate_text": 500}` is rejected at validation time with
+    a message pointing here. `foxnose-sdk` rejects `truncate_text` in a search
+    body anyway. The dedicated parameters above are the only way to send it.
+
+    This differs from `FoxNoseLoader`, whose `params` **is** a query-string
+    passthrough — see [Document Loader](loader.md#limiting-response-size).
+
 ## Sync vs Async
 
 ### Sync (default)

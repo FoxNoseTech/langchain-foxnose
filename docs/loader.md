@@ -103,6 +103,31 @@ Content mapping works the same way as in `FoxNoseRetriever`. See [Configuration]
 | `exclude_metadata_fields` | Blacklist of `data` fields to exclude |
 | `include_sys_metadata` | Include `_sys` fields (default: `True`) |
 
+## Limiting Response Size
+
+`truncate_text` caps the length of every `text`-typed field in the response,
+server-side:
+
+```python
+loader = FoxNoseLoader(
+    client=client,
+    collection_path="knowledge-base",
+    page_content_field="body",
+    truncate_text=500,
+)
+```
+
+`params` is a raw query-string passthrough to `list_resources`, so
+`params={"truncate_text": 500}` also works and always has. Prefer the
+dedicated argument, and never set both — that raises. Must be >= 1.
+
+!!! note "The retriever's contract is stricter"
+
+    On `FoxNoseRetriever`, `search_kwargs` is a request-*body* passthrough, so
+    `truncate_text` there is rejected outright and the dedicated parameter is
+    the only way — see
+    [Retriever](retriever.md#limiting-response-size).
+
 ## API Reference
 
 ::: langchain_foxnose.loaders.FoxNoseLoader

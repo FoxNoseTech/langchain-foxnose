@@ -62,6 +62,13 @@ Exactly one of these must be set:
 | `sort` | `list[str]` | `None` | Sort fields (prefix `-` for descending) |
 | `search_kwargs` | `dict` | `{}` | Extra params passed to SDK methods (see below) |
 
+### Query-string parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `truncate_text` | `int` | `None` | Cap the length of every `text`-typed field in the response, in characters (must be >= 1) |
+| `query_params` | `dict` | `None` | Any other query-string parameter forwarded to `_search` |
+
 !!! note
     Known keys in `search_kwargs` like `limit` and `offset` are extracted as named
     SDK method parameters. The rest are passed through `**extra_body`.
@@ -70,6 +77,13 @@ Exactly one of these must be set:
     `search_kwargs` must not contain keys that conflict with `SearchRequest` fields:
     `search_mode`, `vector_search`, `vector_field_search`, `hybrid_config`,
     `vector_boost_config`, `find_text`, `find_phrase`.
+
+!!! warning
+    `search_kwargs` must not contain the query-string keys `truncate_text` or
+    `query_params` either — it is a request-*body* passthrough, and
+    `foxnose-sdk` rejects `truncate_text` in a search body. Use the dedicated
+    parameters above. Setting `truncate_text` both directly and inside
+    `query_params` also raises.
 
 !!! note
     `text_threshold` and `similarity_threshold` are validated to be in the range 0-1.
@@ -99,3 +113,17 @@ Exactly one of these must be set:
 | `vector` | Not allowed | Required | Pure semantic search |
 | `hybrid` | Required | Required | Blended text + vector with weights |
 | `vector_boosted` | Required | Required | Text results boosted by vector similarity |
+
+## Other components
+
+This page covers `FoxNoseRetriever`. The other components document their own
+parameters:
+
+- [`FoxNoseLoader`](loader.md) — `params`, `batch_size`, `truncate_text`
+- [`FoxNoseWriter`](writer.md) — `document_mapper`, `external_id_key`, `include_sys_metadata`
+- [`create_foxnose_tool`](tool.md) — `name`, `description`, `response_format`
+
+All of them accept `collection_path` and the same content-mapping and metadata
+options as the retriever, except the writer, which maps in the opposite
+direction and therefore has no `page_content_fields` / `page_content_mapper`
+(it uses `document_mapper` instead).

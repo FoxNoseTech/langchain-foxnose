@@ -60,12 +60,14 @@ for doc in docs:
 
 - **All search modes**: text, vector, hybrid, and vector-boosted search
 - **Custom embeddings**: bring your own LangChain `Embeddings` model or pre-computed vectors
-- **Bulk document loading**: cursor-based pagination with lazy loading for large folders
+- **Bulk document loading**: cursor-based pagination with lazy loading for large collections
+- **Document writing**: publish `Document` objects into a collection with external-id deduplication
 - **Agent-ready search tool**: wrap any retriever as a tool for LLM agents
 - **Flexible content mapping**: single field, multiple fields, or custom mapper function
 - **Metadata control**: whitelist, blacklist, or include system metadata
 - **Native async**: uses `AsyncFluxClient` for true async when available
 - **Structured filtering**: pass FoxNose `where` filters for precise retrieval
+- **Server-side truncation**: cap `text` field length with `truncate_text` instead of shipping whole documents
 - **Full configuration**: search fields, thresholds, hybrid weights, sort, and more
 
 ## Search Modes
@@ -163,10 +165,49 @@ loader = FoxNoseLoader(
 # Load all documents at once
 docs = loader.load()
 
-# Or iterate lazily for large folders
+# Or iterate lazily for large collections
 for doc in loader.lazy_load():
     print(doc.metadata.get("key"), doc.page_content[:100])
 ```
+
+## Document Writer
+
+`FoxNoseWriter` publishes `Document` objects into a collection. Requires a Flux
+key with write access.
+
+```python
+from langchain_core.documents import Document
+from langchain_foxnose import FoxNoseBatchWriteError, FoxNoseWriter
+
+writer = FoxNoseWriter(
+    client=client,
+    collection_path="knowledge-base",
+    page_content_field="body",
+    external_id_key="source_id",   # metadata key used for deduplication
+)
+
+try:
+    keys = writer.add_documents([
+        Document(
+            page_content="FoxNose is the knowledge layer for RAG.",
+            metadata={"title": "What is FoxNose?", "source_id": "docs/intro"},
+        ),
+    ])
+except FoxNoseBatchWriteError as exc:
+    # exc.written_keys     -> written, NOT rolled back (Flux has no delete)
+    # exc.failed_index     -> outcome UNKNOWN, re-read before retrying
+    # exc.pending_indexes  -> guaranteed not attempted
+    # exc.cause            -> the underlying typed SDK error; branch on this
+    raise
+
+# A full-document replace, not a merge:
+writer.update_document(keys[0], Document(page_content="Updated.", metadata={...}))
+```
+
+Batches are written sequentially and stop at the first failure — there is no
+concurrency option, because overlapping non-idempotent writes that cannot be
+deleted make it impossible to report what was attempted. See the
+[writer guide](https://langchain-foxnose.readthedocs.io/en/latest/writer/).
 
 ## Agent Tool
 
@@ -218,6 +259,7 @@ docs = await retriever.ainvoke("search query")
 - [Getting Started](https://langchain-foxnose.readthedocs.io/en/latest/getting-started/)
 - [Retriever](https://langchain-foxnose.readthedocs.io/en/latest/retriever/)
 - [Document Loader](https://langchain-foxnose.readthedocs.io/en/latest/loader/)
+- [Document Writer](https://langchain-foxnose.readthedocs.io/en/latest/writer/)
 - [Search Tool](https://langchain-foxnose.readthedocs.io/en/latest/tool/)
 - [Configuration](https://langchain-foxnose.readthedocs.io/en/latest/configuration/)
 - [Examples](https://langchain-foxnose.readthedocs.io/en/latest/examples/)
