@@ -41,7 +41,7 @@ class TestFoxNoseRetrieverStandard(RetrieversIntegrationTests):
         )
         return {
             "client": client,
-            "folder_path": os.environ["FOXNOSE_FOLDER_PATH"],
+            "collection_path": os.environ["FOXNOSE_FOLDER_PATH"],
             "page_content_field": os.environ.get("FOXNOSE_CONTENT_FIELD", "body"),
             "search_mode": "vector",
             "similarity_threshold": 0.2,

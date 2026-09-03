@@ -42,7 +42,7 @@ def live_retriever():
     )
     return FoxNoseRetriever(
         client=client,
-        folder_path=os.environ["FOXNOSE_FOLDER_PATH"],
+        collection_path=os.environ["FOXNOSE_FOLDER_PATH"],
         page_content_field=os.environ.get("FOXNOSE_CONTENT_FIELD", "body"),
         search_mode="hybrid",
         top_k=3,

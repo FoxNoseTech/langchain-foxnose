@@ -15,7 +15,7 @@ client = FluxClient(
 
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     search_mode="hybrid",
     top_k=5,
@@ -31,7 +31,7 @@ for doc in docs:
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="hybrid",
     top_k=10,
@@ -48,7 +48,7 @@ retriever = FoxNoseRetriever(
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     where={
         "$": {
@@ -67,7 +67,7 @@ retriever = FoxNoseRetriever(
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector_boosted",
     vector_boost_config={
@@ -95,7 +95,7 @@ async def main():
 
     retriever = FoxNoseRetriever(
         async_client=async_client,
-        folder_path="knowledge-base",
+        collection_path="knowledge-base",
         page_content_field="body",
         search_mode="hybrid",
         top_k=5,
@@ -115,7 +115,7 @@ asyncio.run(main())
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_fields=["title", "summary", "body"],
     page_content_separator="\n\n",
 )
@@ -126,7 +126,7 @@ retriever = FoxNoseRetriever(
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_mapper=lambda r: (
         f"# {r['data']['title']}\n"
         f"Category: {r['data'].get('category', 'N/A')}\n\n"

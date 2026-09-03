@@ -26,7 +26,7 @@ FoxNose returns structured results with `_sys` (system metadata) and `data` (you
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
 )
 ```
@@ -36,7 +36,7 @@ retriever = FoxNoseRetriever(
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_fields=["title", "body"],
     page_content_separator="\n\n",  # default
 )
@@ -49,7 +49,7 @@ For full control, pass a callable that receives the raw result dict:
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_mapper=lambda result: (
         f"# {result['data']['title']}\n\n{result['data']['body']}"
     ),
@@ -103,7 +103,7 @@ from langchain_openai import OpenAIEmbeddings
 
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector",
     embeddings=OpenAIEmbeddings(model="text-embedding-3-small"),
@@ -124,7 +124,7 @@ If you already have a vector, pass it directly:
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector",
     query_vector=[0.1, 0.2, ...],   # your pre-computed vector
@@ -139,7 +139,7 @@ Custom embeddings also work in `vector_boosted` mode. The retriever sends both t
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector_boosted",
     embeddings=OpenAIEmbeddings(model="text-embedding-3-small"),

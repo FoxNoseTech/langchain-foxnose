@@ -19,7 +19,7 @@ async def main() -> None:
     # Create the retriever with the async client
     retriever = FoxNoseRetriever(
         async_client=async_client,
-        folder_path="knowledge-base",
+        collection_path="knowledge-base",
         page_content_field="body",
         search_mode="hybrid",
         top_k=5,

@@ -36,7 +36,7 @@ client = FluxClient(
 
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     search_mode="hybrid",
     top_k=5,

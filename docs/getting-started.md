@@ -40,14 +40,14 @@ from langchain_foxnose import FoxNoseRetriever
 
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     search_mode="hybrid",
     top_k=5,
 )
 ```
 
-- `folder_path` — the FoxNose folder connected to your Flux API
+- `collection_path` — the FoxNose collection connected to your Flux API
 - `page_content_field` — which `data` field becomes the document's `page_content`
 - `search_mode` — `"text"`, `"vector"`, `"hybrid"`, or `"vector_boosted"`
 - `top_k` — how many results to return
@@ -108,7 +108,7 @@ retriever = FoxNoseRetriever.from_client_params(
     base_url="https://<env_key>.fxns.io",
     api_prefix="my_api",
     auth=SimpleKeyAuth("YOUR_PUBLIC_KEY", "YOUR_SECRET_KEY"),
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
 )
 ```

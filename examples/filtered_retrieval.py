@@ -18,7 +18,7 @@ client = FluxClient(
 # - Sorted by newest first
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="hybrid",
     top_k=10,

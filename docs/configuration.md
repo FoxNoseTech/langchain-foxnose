@@ -9,11 +9,17 @@ All parameters for `FoxNoseRetriever`.
 | `client` | `FluxClient` | One of `client`/`async_client` | Synchronous Flux client |
 | `async_client` | `AsyncFluxClient` | One of `client`/`async_client` | Async Flux client |
 
-## Folder
+## Collection
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `folder_path` | `str` | Yes | — | FoxNose folder path (e.g. `"knowledge-base"`) |
+| `collection_path` | `str` | Yes | — | FoxNose collection path (e.g. `"knowledge-base"`) |
+
+### Deprecated aliases
+
+| Parameter | Replacement | Notes |
+|-----------|-------------|-------|
+| `folder_path` | `collection_path` | Renamed in 0.4.0 following the SDK's Folder → Collection rename. Still accepted on `FoxNoseRetriever`, `FoxNoseLoader` and `create_foxnose_tool`, but emits a one-shot `DeprecationWarning` and will be removed in 1.0. Passing both raises `ValueError`. |
 
 ## Content Mapping
 

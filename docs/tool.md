@@ -19,7 +19,7 @@ client = FluxClient(
 
 tool = create_foxnose_tool(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
 )
 ```
@@ -60,7 +60,7 @@ from langchain_foxnose import FoxNoseRetriever, create_foxnose_tool
 
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     search_mode="hybrid",
     top_k=5,
@@ -80,7 +80,8 @@ tool = create_foxnose_tool(
 | `client` | `None` | Sync `FluxClient` (used to build a retriever if none provided) |
 | `async_client` | `None` | Async `AsyncFluxClient` |
 | `retriever` | `None` | Existing `FoxNoseRetriever` to wrap |
-| `folder_path` | — | Folder path (required when building a new retriever) |
+| `collection_path` | — | Collection path (required when building a new retriever) |
+| `folder_path` | `None` | *Deprecated* alias for `collection_path`; removed in 1.0 |
 | `page_content_field` | `None` | Data field for `page_content` |
 | `name` | `"foxnose_search"` | Tool name exposed to the agent |
 | `description` | *"Search the FoxNose…"* | Tool description exposed to the agent |

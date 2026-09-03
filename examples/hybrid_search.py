@@ -14,7 +14,7 @@ client = FluxClient(
 # Hybrid search: blends text and vector results with custom weights
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_fields=["title", "body"],
     page_content_separator="\n\n",
     search_mode="hybrid",
