@@ -27,14 +27,29 @@ tool = create_foxnose_tool(
 ## Using with an Agent
 
 ```python
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
 
 llm = ChatOpenAI(model="gpt-4o")
-agent = create_react_agent(llm, tools=[tool])
+agent = create_agent(model=llm, tools=[tool])
 
 result = agent.invoke({"messages": [{"role": "user", "content": "How do I reset my password?"}]})
+print(result["messages"][-1].content)
 ```
+
+`create_agent` accepts a model instance or a provider string, so
+`create_agent(model="openai:gpt-4o", tools=[tool])` works too and saves the
+explicit `ChatOpenAI` import.
+
+!!! note "Migrating from LangChain 0.3"
+
+    `langgraph.prebuilt.create_react_agent` is deprecated in favour of
+    `langchain.agents.create_agent`, which is now the only public agent factory
+    (`langchain.agents.__all__` is just `AgentState` and `create_agent`). Note
+    that `create_react_agent` took the model positionally as its first
+    argument and called the instruction parameter `prompt`; `create_agent`
+    names them `model` and `system_prompt`. The old function still imports and
+    emits no runtime warning, so nothing breaks loudly — it just rots.
 
 ## Wrapping an Existing Retriever
 

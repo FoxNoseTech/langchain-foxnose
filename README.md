@@ -188,9 +188,9 @@ tool = create_foxnose_tool(
 # Use directly
 result = tool.invoke("How do I reset my password?")
 
-# Or plug into any LangChain agent
-# from langgraph.prebuilt import create_react_agent
-# agent = create_react_agent(llm, tools=[tool])
+# Or plug into a LangChain agent
+# from langchain.agents import create_agent
+# agent = create_agent(model="openai:gpt-4o", tools=[tool])
 ```
 
 ## Async Usage

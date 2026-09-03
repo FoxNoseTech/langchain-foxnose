@@ -135,20 +135,42 @@ retriever = FoxNoseRetriever(
 )
 ```
 
-## RetrievalQA Chain
+## Agentic RAG
 
 ```python
-from langchain_openai import ChatOpenAI
-from langchain.chains import RetrievalQA
+from langchain.agents import create_agent
+from langchain_core.messages import ToolMessage
 
-qa = RetrievalQA.from_chain_type(
-    llm=ChatOpenAI(model="gpt-4"),
-    retriever=retriever,
-    return_source_documents=True,
+from langchain_foxnose import create_foxnose_tool
+
+tool = create_foxnose_tool(
+    client=client,
+    collection_path="articles",
+    page_content_field="body",
+    response_format="content_and_artifact",
 )
+agent = create_agent(model="openai:gpt-4o", tools=[tool])
 
-result = qa.invoke({"query": "How does vector search work?"})
-print(result["result"])
-for doc in result["source_documents"]:
-    print(f"  Source: {doc.metadata['key']}")
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "How does vector search work?"}]}
+)
+print(result["messages"][-1].content)
+
+# Source documents come back on the tool's artifact.
+for message in result["messages"]:
+    if isinstance(message, ToolMessage) and message.artifact:
+        for doc in message.artifact:
+            print(f"  Source: {doc.metadata['key']}")
 ```
+
+`response_format="content_and_artifact"` is what makes the retrieved
+`Document` objects available; with the default `"content"` the tool returns
+only the joined text. The artifact is attached to the `ToolMessage` the agent
+produces — calling `tool.invoke({"query": ...})` yourself returns just the
+string, because there is no tool call to attach it to.
+
+!!! note "Migrating from LangChain 0.3"
+
+    This section used `RetrievalQA` from `langchain.chains`, which was removed
+    in LangChain 1.0 along with the whole module. `result["source_documents"]`
+    has no direct equivalent — the artifact above replaces it.
