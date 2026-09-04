@@ -398,3 +398,104 @@ class TestLoaderTruncateText:
         ).load()
         params = mock_flux_client_with_list.list_resources.call_args.kwargs["params"]
         assert params["truncate_text"] == 90
+
+
+class TestCursorNormalisation:
+    """FoxNose returns `next` as a FULL URL, not the token the API accepts.
+
+    Feeding the URL straight back made the backend answer with page one and the
+    same `next`, so load() re-fetched the first page forever -- 17k requests in
+    30s against a live backend. The mocks used to model an opaque token, which
+    is exactly why the unit suite missed it.
+    """
+
+    @staticmethod
+    def _url(token: str, limit: int = 2) -> str:
+        return f"http://127.0.0.1:8000/api/articles?limit={limit}&next={token}"
+
+    def test_url_shaped_cursor_is_reduced_to_its_token(self) -> None:
+        from langchain_foxnose.loaders import _extract_cursor
+
+        assert _extract_cursor(self._url("abc123")) == "abc123"
+
+    def test_plain_token_passes_through(self) -> None:
+        from langchain_foxnose.loaders import _extract_cursor
+
+        assert _extract_cursor("abc123") == "abc123"
+
+    @pytest.mark.parametrize("value", [None, "", "http://host/api/articles?limit=2", 42, {"a": 1}])
+    def test_unusable_values_terminate(self, value: Any) -> None:
+        from langchain_foxnose.loaders import _extract_cursor
+
+        assert _extract_cursor(value) is None
+
+    def test_load_follows_a_url_shaped_cursor(self) -> None:
+        """Two pages then the end, with realistic URL-shaped `next` values."""
+        client = MagicMock()
+        client.list_resources.side_effect = [
+            _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("page2")),
+            _make_list_response(SAMPLE_RESULTS[2:], next_cursor=None),
+        ]
+        docs = FoxNoseLoader(
+            client=client,
+            collection_path="articles",
+            page_content_field="body",
+            batch_size=2,
+        ).load()
+
+        assert len(docs) == len(SAMPLE_RESULTS)
+        # The second call must send the extracted TOKEN, not the whole URL.
+        assert client.list_resources.call_args_list[1].kwargs["params"]["next"] == "page2"
+
+    def test_load_stops_when_the_cursor_does_not_advance(self) -> None:
+        """The live failure mode: same page, same `next`, forever.
+
+        The mock yields a bounded number of identical pages on purpose. Losing
+        the guard must make this FAIL (StopIteration on a used-up side_effect),
+        not hang the suite -- which is what an unbounded return_value would do.
+        """
+        stuck = _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("stuck"))
+        client = MagicMock()
+        client.list_resources.side_effect = [stuck] * 5
+
+        docs = FoxNoseLoader(
+            client=client,
+            collection_path="articles",
+            page_content_field="body",
+            batch_size=2,
+        ).load()
+
+        # One page, then one more attempt that returns the same cursor: stop.
+        assert client.list_resources.call_count == 2
+        assert len(docs) == 4
+
+    async def test_alazy_load_follows_a_url_shaped_cursor(self) -> None:
+        client = AsyncMock()
+        client.list_resources.side_effect = [
+            _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("page2")),
+            _make_list_response(SAMPLE_RESULTS[2:], next_cursor=None),
+        ]
+        loader = FoxNoseLoader(
+            async_client=client,
+            collection_path="articles",
+            page_content_field="body",
+            batch_size=2,
+        )
+        docs = [doc async for doc in loader.alazy_load()]
+
+        assert len(docs) == len(SAMPLE_RESULTS)
+        assert client.list_resources.call_args_list[1].kwargs["params"]["next"] == "page2"
+
+    async def test_alazy_load_stops_when_the_cursor_does_not_advance(self) -> None:
+        stuck = _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("stuck"))
+        client = AsyncMock()
+        client.list_resources.side_effect = [stuck] * 5
+        loader = FoxNoseLoader(
+            async_client=client,
+            collection_path="articles",
+            page_content_field="body",
+            batch_size=2,
+        )
+        docs = [doc async for doc in loader.alazy_load()]
+        assert client.list_resources.call_count == 2
+        assert len(docs) == 4

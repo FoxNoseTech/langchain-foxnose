@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
@@ -16,6 +17,25 @@ try:
 except ImportError:  # pragma: no cover
     FluxClient = None  # type: ignore[assignment,misc]
     AsyncFluxClient = None  # type: ignore[assignment,misc]
+
+
+def _extract_cursor(next_value: Any) -> str | None:
+    """Normalise a ``next`` field into the token ``list_resources`` expects.
+
+    FoxNose returns ``next`` as a FULL URL, e.g.
+    ``http://host/api/articles?limit=2&next=9avd3azzc0tp`` -- not as the opaque
+    token the ``next`` query parameter takes. Feeding the whole URL back means
+    the backend cannot parse it, silently answers with page one again, and
+    returns the same ``next``: an infinite loop that re-fetches the first page
+    forever. A plain token is passed through unchanged, so a backend that
+    returns one keeps working.
+    """
+    if not next_value or not isinstance(next_value, str):
+        return None
+    if "://" not in next_value:
+        return next_value
+    values = parse_qs(urlparse(next_value).query).get("next")
+    return values[0] if values else None
 
 
 class FoxNoseLoader(BaseLoader):
@@ -266,9 +286,12 @@ class FoxNoseLoader(BaseLoader):
             documents = self._map_results(results)
             yield from documents
 
-            cursor = response.get("next")
-            if cursor is None:
+            next_cursor = _extract_cursor(response.get("next"))
+            if next_cursor is None or next_cursor == cursor:
+                # A cursor that does not advance means the backend is handing
+                # back the same page; stop rather than loop forever.
                 break
+            cursor = next_cursor
 
     async def alazy_load(self) -> AsyncIterator[Document]:
         """Asynchronously load documents from FoxNose with cursor-based pagination.
@@ -297,6 +320,7 @@ class FoxNoseLoader(BaseLoader):
             for doc in documents:
                 yield doc
 
-            cursor = response.get("next")
-            if cursor is None:
+            next_cursor = _extract_cursor(response.get("next"))
+            if next_cursor is None or next_cursor == cursor:
                 break
+            cursor = next_cursor
