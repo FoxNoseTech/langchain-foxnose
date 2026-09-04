@@ -188,7 +188,7 @@ Every underlying error from `add_documents` / `aadd_documents` is wrapped in
 after it is dead code:
 
 ```python
-from foxnose_sdk.errors import ContentValidationFailed, ExternalIdConflict
+from foxnose_sdk.errors import ExternalIdConflict, FoxnoseAPIError
 from langchain_foxnose import FoxNoseBatchWriteError
 
 try:
@@ -199,20 +199,33 @@ except FoxNoseBatchWriteError as exc:
     print(f"Not attempted:            {exc.pending_indexes}")
 
     cause = exc.cause
-    if isinstance(cause, ContentValidationFailed):
-        for error in cause.errors:
-            print(f"  schema error at {error.get('json_path')}")
-    elif isinstance(cause, ExternalIdConflict):
+    if isinstance(cause, ExternalIdConflict):
         print("  that external id already exists")
+    elif isinstance(cause, FoxnoseAPIError) and cause.status_code == 422:
+        print(f"  schema rejected the document: {cause.detail}")
     raise
 ```
+
+!!! warning "Match a schema violation on the status code, not on `ContentValidationFailed`"
+
+    `foxnose-sdk` maps only `(422, "content_validation_failed")` onto the typed
+    `ContentValidationFailed`, but a **Flux write** that violates the schema
+    comes back as `data_validation_error`, which is not mapped — so it arrives
+    as a plain `FoxnoseAPIError` and an `isinstance(cause,
+    ContentValidationFailed)` branch never fires. Verified against a live
+    backend. Check `cause.status_code == 422` instead, and read `cause.detail`;
+    if you also want the structured list, guard it:
+
+    ```python
+    errors = getattr(cause, "errors", None)  # only on ContentValidationFailed
+    ```
 
 The three ranges mean exactly this:
 
 | Attribute | Guarantee |
 |-----------|-----------|
 | `written_keys` | Documents `0 … failed_index-1`. Written and **not rolled back** — Flux has no delete endpoint, so they stay. |
-| `failed_index` | The document whose write raised. Its outcome is **unknown**, not "failed": a `ContentValidationFailed` (422) or `ExternalIdConflict` (409) wrote nothing, but an `UpstreamError` (502) or a transport timeout may have written it. |
+| `failed_index` | The document whose write raised. Its outcome is **unknown**, not "failed": a schema violation (422) or `ExternalIdConflict` (409) wrote nothing, but an `UpstreamError` (502) or a transport timeout may have written it. |
 | `pending_indexes` | Documents after the failure. Guaranteed **not attempted** — this is what the sequential, stop-at-first-failure design buys you. |
 
 !!! danger "Never blindly retry a failed write"
@@ -234,7 +247,7 @@ resource and therefore does not wrap):
 |-----------|------|---------|
 | `CollectionNotWritable` | 403 | The collection's connection does not accept writes, or the key lacks write access |
 | `ExternalIdConflict` | 409 | The supplied external id already identifies a resource |
-| `ContentValidationFailed` | 422 | `data` failed the collection schema; see `.errors` / `.errors_truncated` |
+| `ContentValidationFailed` | 422 | `data` failed the collection schema; see `.errors` / `.errors_truncated`. **A Flux write reports this as a plain `FoxnoseAPIError` with `error_code="data_validation_error"`** — see the warning above. |
 | `UpstreamError` | 502 | The write could not be confirmed — outcome unknown |
 
 ## Requirements
