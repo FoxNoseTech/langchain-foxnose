@@ -254,6 +254,86 @@ retriever = FoxNoseRetriever(
 docs = await retriever.ainvoke("search query")
 ```
 
+## Running integration tests
+
+The unit suite needs nothing: it runs offline with sockets disabled. The
+integration suite talks to a real FoxNose environment and **skips itself
+entirely** unless the read variables below are set, so a fresh clone stays
+green without any credentials.
+
+```bash
+pytest tests/integration_tests/
+```
+
+### Fixture contract
+
+The tests assert against a specific shape, so the environment they point at has
+to provide it. Point them at a **throwaway environment holding synthetic
+documents** — never at production or customer data. An assertion failure prints
+the surrounding document content and metadata, and in CI that lands in a public
+log.
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `FOXNOSE_BASE_URL` | yes | Environment URL, e.g. `https://<env_key>.fxns.io` |
+| `FOXNOSE_API_PREFIX` | yes | Flux API prefix |
+| `FOXNOSE_PUBLIC_KEY` | yes | Read key, public part |
+| `FOXNOSE_SECRET_KEY` | yes | Read key, secret part |
+| `FOXNOSE_COLLECTION_PATH` | yes | Collection the read tests search |
+| `FOXNOSE_QUERY` | yes | Token matching **at least 3** documents in it |
+| `FOXNOSE_CONTENT_FIELD` | no (`body`) | Field used as `page_content` |
+| `FOXNOSE_METADATA_FIELD` | no (`title`) | A second field, for the mapping tests |
+| `FOXNOSE_FILTER_FIELD` | for the filter test | Field the `where` test filters on |
+| `FOXNOSE_FILTER_VALUE` | for the filter test | Value it filters for |
+| `FOXNOSE_WRITE_PUBLIC_KEY` | for the writer tests | Write key, public part |
+| `FOXNOSE_WRITE_SECRET_KEY` | for the writer tests | Write key, secret part |
+| `FOXNOSE_WRITE_COLLECTION_PATH` | for the writer tests | Throwaway collection to write into |
+| `FOXNOSE_WRITE_CONTENT_FIELD` | no (`FOXNOSE_CONTENT_FIELD`) | Content field of that collection |
+
+The collection behind `FOXNOSE_COLLECTION_PATH` must hold:
+
+- at least **3 documents matching `FOXNOSE_QUERY`** — the standard suite asserts
+  on exact result counts, and a thinner corpus turns those into failures that
+  look like retriever bugs;
+- at least one document the filter predicate **excludes**, and at least one it
+  matches. A malformed `where` clause is silently ignored by the backend rather
+  than rejected, so the test compares filtered against unfiltered results and
+  needs both sides to be non-empty;
+- at least one value in the content field **longer than 40 characters**, or the
+  truncation assertion passes vacuously.
+
+Two properties of the write side are worth knowing before pointing these
+anywhere real:
+
+- **Flux has no delete endpoint.** The writer tests append rows and cannot clean
+  up, so `FOXNOSE_WRITE_COLLECTION_PATH` must be a dedicated throwaway
+  collection that you prune yourself.
+- **A Flux key's permissions are scoped to the API prefix, not to a
+  collection.** The write key can therefore write any collection under
+  `FOXNOSE_API_PREFIX` whose `allowed_methods` permit it. Keep that prefix
+  dedicated to these fixtures: the read collection read-only, the throwaway
+  collection the only writable one. Otherwise the writer tests can append to the
+  corpus whose document counts the read tests assert on.
+
+Give the write key `read`, `create` and `update` — never `delete`.
+
+### Strict mode
+
+Set `FOXNOSE_INTEGRATION_REQUIRED=1` to turn every "this is not configured"
+skip into a failure:
+
+```bash
+FOXNOSE_INTEGRATION_REQUIRED=1 pytest tests/integration_tests/
+```
+
+CI sets it on merges to `main`. Without it, an unset secret silently drops a
+whole test category while the job still reports success — note that GitHub
+exports an unset secret as an **empty string**, not as an absent variable, so
+absence is not something the test code can detect on its own.
+
+Skips for capabilities the backend genuinely lacks — vector search being
+unavailable, for instance — stay skips even in strict mode.
+
 ## Documentation
 
 - [Getting Started](https://langchain-foxnose.readthedocs.io/en/latest/getting-started/)
