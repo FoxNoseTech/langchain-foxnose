@@ -32,13 +32,11 @@ pytest tests/unit_tests/test_search_builder.py
 make integration_test
 ```
 
-Integration tests require the following environment variables:
-- `FOXNOSE_BASE_URL`
-- `FOXNOSE_API_PREFIX`
-- `FOXNOSE_PUBLIC_KEY`
-- `FOXNOSE_SECRET_KEY`
-- `FOXNOSE_FOLDER_PATH`
-- `FOXNOSE_CONTENT_FIELD` (optional, defaults to `body`)
+Integration tests run against a real FoxNose environment and skip themselves
+unless it is configured. The full variable table, and the shape the collections
+have to have, are in the README under "Running integration tests" — point them
+at a throwaway environment with synthetic documents, never at production or
+customer data.
 
 ## Linting & Formatting
 
@@ -56,7 +54,7 @@ make type
 ## Building Documentation
 
 ```bash
-mkdocs serve   # Local preview at http://127.0.0.1:8000
+mkdocs serve   # Local preview; mkdocs prints the address it binds to
 mkdocs build   # Build static site
 ```
 

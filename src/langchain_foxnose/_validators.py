@@ -94,14 +94,26 @@ CONFLICTING_SEARCH_KWARGS = frozenset(
 # rather than being passed through **extra_body.
 NAMED_SEARCH_KWARGS = frozenset({"limit", "offset"})
 
+# Keys that belong in the query string, not the request body. The SDK's
+# _merge_extra() raises on ``truncate_text`` in the body, and ``query_params``
+# would be forwarded as a nonsense body field.
+QUERY_STRING_SEARCH_KWARGS = frozenset({"truncate_text", "query_params"})
+
 
 def validate_search_kwargs(search_kwargs: dict[str, Any]) -> None:
-    """Raise ``ValueError`` if *search_kwargs* contains conflicting keys."""
+    """Raise ``ValueError`` if *search_kwargs* contains unsupported keys."""
     bad = CONFLICTING_SEARCH_KWARGS & search_kwargs.keys()
     if bad:
         raise ValueError(
             f"search_kwargs must not contain keys managed by the retriever: "
             f"{', '.join(sorted(bad))}. Set these via dedicated parameters instead."
+        )
+    bad_query = QUERY_STRING_SEARCH_KWARGS & search_kwargs.keys()
+    if bad_query:
+        raise ValueError(
+            f"search_kwargs must not contain query-string parameters: "
+            f"{', '.join(sorted(bad_query))}. Use the 'truncate_text' or "
+            f"'query_params' parameters instead."
         )
 
 

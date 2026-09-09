@@ -15,7 +15,7 @@ client = FluxClient(
 # Create the search tool
 tool = create_foxnose_tool(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     name="kb_search",
     description="Search the knowledge base for relevant information.",
@@ -28,13 +28,11 @@ result = tool.invoke("How do I reset my password?")
 print("Search result:")
 print(result)
 
-# Use with a LangChain agent (requires langchain-openai and langgraph)
+# Use with a LangChain agent (requires langchain and langchain-openai)
 #
-# from langchain_openai import ChatOpenAI
-# from langgraph.prebuilt import create_react_agent
+# from langchain.agents import create_agent
 #
-# llm = ChatOpenAI(model="gpt-4o")
-# agent = create_react_agent(llm, tools=[tool])
+# agent = create_agent(model="openai:gpt-4o", tools=[tool])
 # response = agent.invoke({
 #     "messages": [{"role": "user", "content": "How do I reset my password?"}]
 # })

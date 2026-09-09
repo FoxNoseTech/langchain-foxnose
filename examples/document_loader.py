@@ -1,4 +1,4 @@
-"""Document loader example — load all documents from a FoxNose folder."""
+"""Document loader example — load all documents from a FoxNose collection."""
 
 from foxnose_sdk.auth import SimpleKeyAuth
 from foxnose_sdk.flux import FluxClient
@@ -15,7 +15,7 @@ client = FluxClient(
 # Create the loader
 loader = FoxNoseLoader(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     params={"where": {"status__eq": "published"}},
     batch_size=50,

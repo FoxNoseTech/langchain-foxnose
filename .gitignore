@@ -12,14 +12,16 @@ build/
 .nox/
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
 .cache/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 *.log
-.env
+.env*
 .venv/
+.venv*/
 venv/
 .idea/
 .vscode/
@@ -29,3 +31,4 @@ venv/
 .DS_Store
 .claude/
 site/
+dist-lc1/

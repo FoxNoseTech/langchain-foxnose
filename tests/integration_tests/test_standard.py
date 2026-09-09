@@ -1,26 +1,35 @@
-"""LangChain standard integration tests for FoxNoseRetriever."""
+"""LangChain's standard retriever suite, run against a configured environment.
+
+The suite asserts EXACTLY 3 and EXACTLY 1 results, which is why the read
+collection must contain at least three documents matching FOXNOSE_QUERY and why
+`read_corpus_is_sufficient` checks that before anything runs.
+"""
 
 from __future__ import annotations
 
 import os
 from typing import Any
 
+import pytest
 from langchain_tests.integration_tests import RetrieversIntegrationTests
 
 from langchain_foxnose import FoxNoseRetriever
 
 
 class TestFoxNoseRetrieverStandard(RetrieversIntegrationTests):
-    """Standard LangChain retriever integration tests.
+    """The suite reads its configuration off ``self``, so bind the fixtures."""
 
-    Requires the following environment variables:
-        FOXNOSE_BASE_URL: e.g. "https://<env_key>.fxns.io"
-        FOXNOSE_API_PREFIX: e.g. "my_api"
-        FOXNOSE_PUBLIC_KEY: Flux API public key
-        FOXNOSE_SECRET_KEY: Flux API secret key
-        FOXNOSE_FOLDER_PATH: Folder containing at least 3 test documents
-        FOXNOSE_CONTENT_FIELD: (optional) field name, defaults to "body"
-    """
+    @pytest.fixture(autouse=True)
+    def _bind(
+        self,
+        flux_client: Any,
+        collection_path: str,
+        content_field: str,
+        read_corpus_is_sufficient: None,
+    ) -> None:
+        self._client = flux_client
+        self._collection_path = collection_path
+        self._content_field = content_field
 
     @property
     def retriever_constructor(self) -> type[FoxNoseRetriever]:
@@ -28,28 +37,16 @@ class TestFoxNoseRetrieverStandard(RetrieversIntegrationTests):
 
     @property
     def retriever_constructor_params(self) -> dict[str, Any]:
-        from foxnose_sdk.auth import SimpleKeyAuth
-        from foxnose_sdk.flux import FluxClient
-
-        client = FluxClient(
-            base_url=os.environ["FOXNOSE_BASE_URL"],
-            api_prefix=os.environ["FOXNOSE_API_PREFIX"],
-            auth=SimpleKeyAuth(
-                os.environ["FOXNOSE_PUBLIC_KEY"],
-                os.environ["FOXNOSE_SECRET_KEY"],
-            ),
-        )
         return {
-            "client": client,
-            "folder_path": os.environ["FOXNOSE_FOLDER_PATH"],
-            "page_content_field": os.environ.get("FOXNOSE_CONTENT_FIELD", "body"),
-            "search_mode": "vector",
-            "similarity_threshold": 0.2,
+            "client": self._client,
+            "collection_path": self._collection_path,
+            "page_content_field": self._content_field,
+            "search_mode": "text",
         }
 
     @property
     def retriever_query_example(self) -> str:
-        return "password reset"
+        return os.environ["FOXNOSE_QUERY"]
 
     @property
     def num_results_arg_name(self) -> str:

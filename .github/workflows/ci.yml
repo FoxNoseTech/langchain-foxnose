@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,35 +44,75 @@ jobs:
   integration-test:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      # Turn every "this is not configured" skip into a failure. Without it a
+      # missing secret silently removes a whole test category and the job still
+      # goes green, which is exactly how a release ships with the writer or the
+      # filter untested. Not a secret, so it is safe at job level.
+      FOXNOSE_INTEGRATION_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Verify required secrets
+      - run: pip install -e ".[test]"
+
+      # Secrets are attached per step, never at job level: a job-level env would
+      # hand them to every step, third-party actions included.
+      - name: Verify the fixture secrets are all present
+        env:
+          FOXNOSE_BASE_URL: ${{ secrets.FOXNOSE_BASE_URL }}
+          FOXNOSE_API_PREFIX: ${{ secrets.FOXNOSE_API_PREFIX }}
+          FOXNOSE_PUBLIC_KEY: ${{ secrets.FOXNOSE_PUBLIC_KEY }}
+          FOXNOSE_SECRET_KEY: ${{ secrets.FOXNOSE_SECRET_KEY }}
+          FOXNOSE_COLLECTION_PATH: ${{ secrets.FOXNOSE_COLLECTION_PATH }}
+          FOXNOSE_QUERY: ${{ secrets.FOXNOSE_QUERY }}
+          FOXNOSE_CONTENT_FIELD: ${{ secrets.FOXNOSE_CONTENT_FIELD }}
+          FOXNOSE_METADATA_FIELD: ${{ secrets.FOXNOSE_METADATA_FIELD }}
+          FOXNOSE_FILTER_FIELD: ${{ secrets.FOXNOSE_FILTER_FIELD }}
+          FOXNOSE_FILTER_VALUE: ${{ secrets.FOXNOSE_FILTER_VALUE }}
+          FOXNOSE_WRITE_PUBLIC_KEY: ${{ secrets.FOXNOSE_WRITE_PUBLIC_KEY }}
+          FOXNOSE_WRITE_SECRET_KEY: ${{ secrets.FOXNOSE_WRITE_SECRET_KEY }}
+          FOXNOSE_WRITE_COLLECTION_PATH: ${{ secrets.FOXNOSE_WRITE_COLLECTION_PATH }}
+          FOXNOSE_WRITE_CONTENT_FIELD: ${{ secrets.FOXNOSE_WRITE_CONTENT_FIELD }}
         run: |
+          # An unset GitHub secret expands to an EMPTY STRING, not to an absent
+          # variable, so every check here has to test for emptiness. The filter
+          # and write variables are in the list because the tests that need them
+          # fail rather than skip under FOXNOSE_INTEGRATION_REQUIRED.
           missing=""
-          for var in FOXNOSE_BASE_URL FOXNOSE_API_PREFIX FOXNOSE_PUBLIC_KEY FOXNOSE_SECRET_KEY FOXNOSE_FOLDER_PATH; do
-            eval "val=\$$var"
-            [ -z "$val" ] && missing="$missing $var"
+          for var in \
+            FOXNOSE_BASE_URL FOXNOSE_API_PREFIX \
+            FOXNOSE_PUBLIC_KEY FOXNOSE_SECRET_KEY \
+            FOXNOSE_COLLECTION_PATH FOXNOSE_QUERY \
+            FOXNOSE_CONTENT_FIELD FOXNOSE_METADATA_FIELD \
+            FOXNOSE_FILTER_FIELD FOXNOSE_FILTER_VALUE \
+            FOXNOSE_WRITE_PUBLIC_KEY FOXNOSE_WRITE_SECRET_KEY \
+            FOXNOSE_WRITE_COLLECTION_PATH FOXNOSE_WRITE_CONTENT_FIELD
+          do
+            eval "value=\$$var"
+            [ -z "$value" ] && missing="$missing $var"
           done
           if [ -n "$missing" ]; then
-            echo "::error::Missing required secrets:$missing"
+            echo "::error::Missing integration secrets:$missing"
+            echo "See 'Running integration tests' in the README for the contract."
             exit 1
           fi
-        env:
-          FOXNOSE_BASE_URL: ${{ secrets.FOXNOSE_BASE_URL }}
-          FOXNOSE_API_PREFIX: ${{ secrets.FOXNOSE_API_PREFIX }}
-          FOXNOSE_PUBLIC_KEY: ${{ secrets.FOXNOSE_PUBLIC_KEY }}
-          FOXNOSE_SECRET_KEY: ${{ secrets.FOXNOSE_SECRET_KEY }}
-          FOXNOSE_FOLDER_PATH: ${{ secrets.FOXNOSE_FOLDER_PATH }}
-      - run: pip install -e ".[test]"
+
       - name: Run integration tests
-        run: pytest tests/integration_tests/
         env:
           FOXNOSE_BASE_URL: ${{ secrets.FOXNOSE_BASE_URL }}
           FOXNOSE_API_PREFIX: ${{ secrets.FOXNOSE_API_PREFIX }}
           FOXNOSE_PUBLIC_KEY: ${{ secrets.FOXNOSE_PUBLIC_KEY }}
           FOXNOSE_SECRET_KEY: ${{ secrets.FOXNOSE_SECRET_KEY }}
-          FOXNOSE_FOLDER_PATH: ${{ secrets.FOXNOSE_FOLDER_PATH }}
+          FOXNOSE_COLLECTION_PATH: ${{ secrets.FOXNOSE_COLLECTION_PATH }}
+          FOXNOSE_QUERY: ${{ secrets.FOXNOSE_QUERY }}
           FOXNOSE_CONTENT_FIELD: ${{ secrets.FOXNOSE_CONTENT_FIELD }}
+          FOXNOSE_METADATA_FIELD: ${{ secrets.FOXNOSE_METADATA_FIELD }}
+          FOXNOSE_FILTER_FIELD: ${{ secrets.FOXNOSE_FILTER_FIELD }}
+          FOXNOSE_FILTER_VALUE: ${{ secrets.FOXNOSE_FILTER_VALUE }}
+          FOXNOSE_WRITE_PUBLIC_KEY: ${{ secrets.FOXNOSE_WRITE_PUBLIC_KEY }}
+          FOXNOSE_WRITE_SECRET_KEY: ${{ secrets.FOXNOSE_WRITE_SECRET_KEY }}
+          FOXNOSE_WRITE_COLLECTION_PATH: ${{ secrets.FOXNOSE_WRITE_COLLECTION_PATH }}
+          FOXNOSE_WRITE_CONTENT_FIELD: ${{ secrets.FOXNOSE_WRITE_CONTENT_FIELD }}
+        run: pytest tests/integration_tests/ -v

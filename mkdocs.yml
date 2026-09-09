@@ -71,6 +71,7 @@ nav:
   - Getting Started: getting-started.md
   - Retriever: retriever.md
   - Document Loader: loader.md
+  - Document Writer: writer.md
   - Search Tool: tool.md
   - Configuration: configuration.md
   - Examples: examples.md

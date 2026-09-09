@@ -1,6 +1,6 @@
 # Document Loader
 
-`FoxNoseLoader` is a LangChain `BaseLoader` that iterates over all resources in a FoxNose folder using cursor-based pagination.
+`FoxNoseLoader` is a LangChain `BaseLoader` that iterates over all resources in a FoxNose collection using cursor-based pagination.
 
 Use it when you need to **bulk-load** every document in a folder — for example to seed a local vector store, build an index, or run batch processing.
 
@@ -19,7 +19,7 @@ client = FluxClient(
 
 loader = FoxNoseLoader(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
 )
 
@@ -48,7 +48,7 @@ async_client = AsyncFluxClient(
 
 loader = FoxNoseLoader(
     async_client=async_client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
 )
 
@@ -63,7 +63,7 @@ Pass query parameters via `params` to filter or sort results:
 ```python
 loader = FoxNoseLoader(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     params={
         "where": {"status__eq": "published"},
@@ -79,7 +79,7 @@ The loader automatically handles cursor-based pagination. Control the page size 
 ```python
 loader = FoxNoseLoader(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     batch_size=50,  # fetch 50 resources per page (default: 100)
 )
@@ -102,6 +102,31 @@ Content mapping works the same way as in `FoxNoseRetriever`. See [Configuration]
 | `metadata_fields` | Whitelist of `data` fields to include |
 | `exclude_metadata_fields` | Blacklist of `data` fields to exclude |
 | `include_sys_metadata` | Include `_sys` fields (default: `True`) |
+
+## Limiting Response Size
+
+`truncate_text` caps the length of every `text`-typed field in the response,
+server-side:
+
+```python
+loader = FoxNoseLoader(
+    client=client,
+    collection_path="knowledge-base",
+    page_content_field="body",
+    truncate_text=500,
+)
+```
+
+`params` is a raw query-string passthrough to `list_resources`, so
+`params={"truncate_text": 500}` also works and always has. Prefer the
+dedicated argument, and never set both — that raises. Must be >= 1.
+
+!!! note "The retriever's contract is stricter"
+
+    On `FoxNoseRetriever`, `search_kwargs` is a request-*body* passthrough, so
+    `truncate_text` there is rejected outright and the dedicated parameter is
+    the only way — see
+    [Retriever](retriever.md#limiting-response-size).
 
 ## API Reference
 

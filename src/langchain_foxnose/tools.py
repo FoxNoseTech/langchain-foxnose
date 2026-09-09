@@ -14,7 +14,8 @@ def create_foxnose_tool(
     client: Any | None = None,
     async_client: Any | None = None,
     retriever: FoxNoseRetriever | None = None,
-    folder_path: str | None = None,
+    collection_path: str | None = None,
+    folder_path: str | None = None,  # deprecated alias for collection_path
     page_content_field: str | None = None,
     name: str = "foxnose_search",
     description: str = (
@@ -44,7 +45,7 @@ def create_foxnose_tool(
             )
             tool = create_foxnose_tool(
                 client=client,
-                folder_path="knowledge-base",
+                collection_path="knowledge-base",
                 page_content_field="body",
             )
 
@@ -52,9 +53,13 @@ def create_foxnose_tool(
         client: Synchronous :class:`~foxnose_sdk.flux.FluxClient` instance.
         async_client: Asynchronous :class:`~foxnose_sdk.flux.AsyncFluxClient` instance.
         retriever: An existing :class:`FoxNoseRetriever` to wrap. If provided,
-            ``client``, ``async_client``, ``folder_path``, ``page_content_field``,
-            and ``retriever_kwargs`` are ignored.
-        folder_path: Folder path in FoxNose (required when building a new retriever).
+            ``client``, ``async_client``, ``collection_path``,
+            ``page_content_field``, and ``retriever_kwargs`` are ignored.
+        collection_path: Collection path in FoxNose (required when building a
+            new retriever).
+        folder_path: Deprecated alias for ``collection_path``. Emits a
+            ``DeprecationWarning`` via ``FoxNoseRetriever`` and will be removed
+            in 1.0.
         page_content_field: Single data field for ``page_content``
             (required when building a new retriever, unless another content
             strategy is provided via ``retriever_kwargs``).
@@ -71,7 +76,8 @@ def create_foxnose_tool(
 
     Raises:
         ValueError: If neither ``retriever`` nor ``client``/``async_client``
-            is provided.
+            is provided, or if both ``collection_path`` and ``folder_path``
+            are provided.
     """
     if retriever is None:
         if client is None and async_client is None:
@@ -79,13 +85,19 @@ def create_foxnose_tool(
                 "Either provide a 'retriever' or at least one of "
                 "'client' / 'async_client' to build one."
             )
-        retriever = FoxNoseRetriever(
-            client=client,
-            async_client=async_client,
-            folder_path=folder_path,  # type: ignore[arg-type]
-            page_content_field=page_content_field,
+        # Build retriever kwargs, letting FoxNoseRetriever's model_validator
+        # handle the folder_path → collection_path migration + deprecation warn.
+        retriever_init_kwargs: dict[str, Any] = {
+            "client": client,
+            "async_client": async_client,
+            "page_content_field": page_content_field,
             **retriever_kwargs,
-        )
+        }
+        if collection_path is not None:
+            retriever_init_kwargs["collection_path"] = collection_path
+        if folder_path is not None:
+            retriever_init_kwargs["folder_path"] = folder_path
+        retriever = FoxNoseRetriever(**retriever_init_kwargs)
 
     return create_retriever_tool(
         retriever=retriever,

@@ -4,5 +4,13 @@ from langchain_foxnose._version import __version__
 from langchain_foxnose.loaders import FoxNoseLoader
 from langchain_foxnose.retrievers import FoxNoseRetriever
 from langchain_foxnose.tools import create_foxnose_tool
+from langchain_foxnose.writers import FoxNoseBatchWriteError, FoxNoseWriter
 
-__all__ = ["FoxNoseLoader", "FoxNoseRetriever", "__version__", "create_foxnose_tool"]
+__all__ = [
+    "FoxNoseBatchWriteError",
+    "FoxNoseLoader",
+    "FoxNoseRetriever",
+    "FoxNoseWriter",
+    "__version__",
+    "create_foxnose_tool",
+]

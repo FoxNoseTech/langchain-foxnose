@@ -26,7 +26,7 @@ FoxNose returns structured results with `_sys` (system metadata) and `data` (you
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
 )
 ```
@@ -36,7 +36,7 @@ retriever = FoxNoseRetriever(
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_fields=["title", "body"],
     page_content_separator="\n\n",  # default
 )
@@ -49,7 +49,7 @@ For full control, pass a callable that receives the raw result dict:
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_mapper=lambda result: (
         f"# {result['data']['title']}\n\n{result['data']['body']}"
     ),
@@ -103,7 +103,7 @@ from langchain_openai import OpenAIEmbeddings
 
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector",
     embeddings=OpenAIEmbeddings(model="text-embedding-3-small"),
@@ -124,7 +124,7 @@ If you already have a vector, pass it directly:
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector",
     query_vector=[0.1, 0.2, ...],   # your pre-computed vector
@@ -139,7 +139,7 @@ Custom embeddings also work in `vector_boosted` mode. The retriever sends both t
 ```python
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="articles",
+    collection_path="articles",
     page_content_field="body",
     search_mode="vector_boosted",
     embeddings=OpenAIEmbeddings(model="text-embedding-3-small"),
@@ -155,6 +155,46 @@ retriever = FoxNoseRetriever(
 - `vector_field` and `vector_fields` are mutually exclusive (`vector_field` for custom embeddings, `vector_fields` for auto-generated)
 - Custom embeddings are only supported in `vector` and `vector_boosted` modes
 - `query_vector` must be non-empty with finite values (no NaN/Inf)
+
+## Limiting Response Size
+
+`truncate_text` caps the length of every `text`-typed field in the response,
+server-side. For RAG this bounds `page_content` without shipping whole
+documents over the wire:
+
+```python
+retriever = FoxNoseRetriever(
+    client=client,
+    collection_path="articles",
+    page_content_field="body",
+    truncate_text=500,
+)
+```
+
+`query_params` forwards any other query-string parameter to the `_search`
+endpoint:
+
+```python
+retriever = FoxNoseRetriever(
+    client=client,
+    collection_path="articles",
+    page_content_field="body",
+    query_params={"truncate_text": 500},
+)
+```
+
+Set `truncate_text` **or** a `truncate_text` key inside `query_params`, never
+both — that raises. Both must be >= 1.
+
+!!! warning "These are query parameters, not body fields"
+
+    `search_kwargs` is a request-*body* passthrough, so
+    `search_kwargs={"truncate_text": 500}` is rejected at validation time with
+    a message pointing here. `foxnose-sdk` rejects `truncate_text` in a search
+    body anyway. The dedicated parameters above are the only way to send it.
+
+    This differs from `FoxNoseLoader`, whose `params` **is** a query-string
+    passthrough — see [Document Loader](loader.md#limiting-response-size).
 
 ## Sync vs Async
 

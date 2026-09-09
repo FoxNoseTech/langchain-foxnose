@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from foxnose_sdk.auth import SimpleKeyAuth
+from foxnose_sdk.flux import AsyncFluxClient, FluxClient
 
 from langchain_foxnose import FoxNoseLoader
 from tests.conftest import SAMPLE_RESULTS, _make_list_response
@@ -340,3 +342,261 @@ class TestLoaderAsync:
         )
         docs = [doc async for doc in loader.alazy_load()]
         assert docs == []
+
+
+class TestLoaderTruncateText:
+    """The `truncate_text` query parameter (SDK 0.8.0)."""
+
+    def test_rejects_zero(self, mock_flux_client_with_list: MagicMock) -> None:
+        with pytest.raises(ValueError, match="truncate_text must be >= 1"):
+            FoxNoseLoader(
+                client=mock_flux_client_with_list,
+                collection_path="articles",
+                page_content_field="body",
+                truncate_text=0,
+            )
+
+    def test_rejects_duplicate_in_params(self, mock_flux_client_with_list: MagicMock) -> None:
+        with pytest.raises(ValueError, match="truncate_text is set both"):
+            FoxNoseLoader(
+                client=mock_flux_client_with_list,
+                collection_path="articles",
+                page_content_field="body",
+                truncate_text=100,
+                params={"truncate_text": 200},
+            )
+
+    def test_forwarded_to_list_resources(self, mock_flux_client_with_list: MagicMock) -> None:
+        FoxNoseLoader(
+            client=mock_flux_client_with_list,
+            collection_path="articles",
+            page_content_field="body",
+            truncate_text=150,
+        ).load()
+        params = mock_flux_client_with_list.list_resources.call_args.kwargs["params"]
+        assert params["truncate_text"] == 150
+        assert params["limit"] == 100
+
+    async def test_forwarded_async(self, mock_async_flux_client_with_list: Any) -> None:
+        loader = FoxNoseLoader(
+            async_client=mock_async_flux_client_with_list,
+            collection_path="articles",
+            page_content_field="body",
+            truncate_text=150,
+        )
+        [doc async for doc in loader.alazy_load()]
+        params = mock_async_flux_client_with_list.list_resources.call_args.kwargs["params"]
+        assert params["truncate_text"] == 150
+
+    def test_params_passthrough_still_works_alone(
+        self, mock_flux_client_with_list: MagicMock
+    ) -> None:
+        """params is a documented raw query-string passthrough; keep it working."""
+        FoxNoseLoader(
+            client=mock_flux_client_with_list,
+            collection_path="articles",
+            page_content_field="body",
+            params={"truncate_text": 90},
+        ).load()
+        params = mock_flux_client_with_list.list_resources.call_args.kwargs["params"]
+        assert params["truncate_text"] == 90
+
+
+class TestCursorNormalisation:
+    """FoxNose returns `next` as a FULL URL, not the token the API accepts.
+
+    Feeding the URL straight back made the backend answer with page one and the
+    same `next`, so load() re-fetched the first page forever -- 17k requests in
+    30s against a live backend. The mocks used to model an opaque token, which
+    is exactly why the unit suite missed it.
+    """
+
+    @staticmethod
+    def _url(token: str, limit: int = 2) -> str:
+        return f"https://example.invalid/api/articles?limit={limit}&next={token}"
+
+    def test_url_shaped_cursor_is_reduced_to_its_token(self) -> None:
+        from langchain_foxnose.loaders import _extract_cursor
+
+        assert _extract_cursor(self._url("abc123")) == "abc123"
+
+    def test_plain_token_passes_through(self) -> None:
+        from langchain_foxnose.loaders import _extract_cursor
+
+        assert _extract_cursor("abc123") == "abc123"
+
+    @pytest.mark.parametrize("value", [None, "", "http://host/api/articles?limit=2", 42, {"a": 1}])
+    def test_unusable_values_terminate(self, value: Any) -> None:
+        from langchain_foxnose.loaders import _extract_cursor
+
+        assert _extract_cursor(value) is None
+
+    def test_load_follows_a_url_shaped_cursor(self) -> None:
+        """Two pages then the end, with realistic URL-shaped `next` values."""
+        client = MagicMock()
+        client.list_resources.side_effect = [
+            _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("page2")),
+            _make_list_response(SAMPLE_RESULTS[2:], next_cursor=None),
+        ]
+        docs = FoxNoseLoader(
+            client=client,
+            collection_path="articles",
+            page_content_field="body",
+            batch_size=2,
+        ).load()
+
+        assert len(docs) == len(SAMPLE_RESULTS)
+        # The second call must send the extracted TOKEN, not the whole URL.
+        assert client.list_resources.call_args_list[1].kwargs["params"]["next"] == "page2"
+
+    def test_load_stops_when_the_cursor_does_not_advance(self) -> None:
+        """The live failure mode: same page, same `next`, forever.
+
+        The mock yields a bounded number of identical pages on purpose. Losing
+        the guard must make this FAIL (StopIteration on a used-up side_effect),
+        not hang the suite -- which is what an unbounded return_value would do.
+        """
+        stuck = _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("stuck"))
+        client = MagicMock()
+        client.list_resources.side_effect = [stuck] * 5
+
+        docs = FoxNoseLoader(
+            client=client,
+            collection_path="articles",
+            page_content_field="body",
+            batch_size=2,
+        ).load()
+
+        # One page, then one more attempt that returns the same cursor: stop.
+        assert client.list_resources.call_count == 2
+        assert len(docs) == 4
+
+    def test_load_stops_on_a_cursor_cycle(self) -> None:
+        """A -> B -> A: no cursor repeats the PREVIOUS one, yet it never ends.
+
+        Guarding only against an immediately repeated cursor let this spin
+        forever. The bounded side_effect makes a lost guard fail on a used-up
+        iterator instead of hanging the suite.
+        """
+        page_a = _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("b"))
+        page_b = _make_list_response(SAMPLE_RESULTS[2:], next_cursor=self._url("a"))
+        client = MagicMock()
+        client.list_resources.side_effect = [page_a, page_b] * 6
+
+        docs = FoxNoseLoader(
+            client=client,
+            collection_path="articles",
+            page_content_field="body",
+            batch_size=2,
+        ).load()
+
+        # Page A (no cursor), page B (cursor "b"), page A again (cursor "a",
+        # never followed before so following it once is right), and only then
+        # does "b" repeat and the loop stops. Detection lands one fetch after
+        # the cycle closes, which is the earliest it can: a cursor is only
+        # known to be part of a cycle once it comes back a second time.
+        assert client.list_resources.call_count == 3
+        # The re-served page is therefore yielded twice. That is the backend
+        # contradicting itself, surfaced as visible duplication rather than
+        # hidden behind an infinite loop.
+        assert len(docs) == len(SAMPLE_RESULTS) + 2
+
+    async def test_alazy_load_stops_on_a_cursor_cycle(self) -> None:
+        """The async loop carries the same guard; it drifted apart once already."""
+        page_a = _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("b"))
+        page_b = _make_list_response(SAMPLE_RESULTS[2:], next_cursor=self._url("a"))
+        client = AsyncMock()
+        client.list_resources.side_effect = [page_a, page_b] * 6
+
+        docs = [
+            doc
+            async for doc in FoxNoseLoader(
+                async_client=client,
+                collection_path="articles",
+                page_content_field="body",
+                batch_size=2,
+            ).alazy_load()
+        ]
+
+        assert client.list_resources.call_count == 3
+        assert len(docs) == len(SAMPLE_RESULTS) + 2
+
+    async def test_alazy_load_follows_a_url_shaped_cursor(self) -> None:
+        client = AsyncMock()
+        client.list_resources.side_effect = [
+            _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("page2")),
+            _make_list_response(SAMPLE_RESULTS[2:], next_cursor=None),
+        ]
+        loader = FoxNoseLoader(
+            async_client=client,
+            collection_path="articles",
+            page_content_field="body",
+            batch_size=2,
+        )
+        docs = [doc async for doc in loader.alazy_load()]
+
+        assert len(docs) == len(SAMPLE_RESULTS)
+        assert client.list_resources.call_args_list[1].kwargs["params"]["next"] == "page2"
+
+    async def test_alazy_load_stops_when_the_cursor_does_not_advance(self) -> None:
+        stuck = _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("stuck"))
+        client = AsyncMock()
+        client.list_resources.side_effect = [stuck] * 5
+        loader = FoxNoseLoader(
+            async_client=client,
+            collection_path="articles",
+            page_content_field="body",
+            batch_size=2,
+        )
+        docs = [doc async for doc in loader.alazy_load()]
+        assert client.list_resources.call_count == 2
+        assert len(docs) == 4
+
+
+class TestLoaderFromClientParams:
+    """The factory builds its own client, so nothing mocks it out.
+
+    Constructing a Flux client opens no socket, so both branches are reachable
+    offline -- they were previously exercised only by the live suite, which
+    left the whole factory uncovered on every offline run.
+    """
+
+    _PARAMS: ClassVar[dict[str, Any]] = {
+        "base_url": "https://e.fxns.io",
+        "api_prefix": "p",
+        "auth": SimpleKeyAuth("public", "secret"),
+        "collection_path": "articles",
+        "page_content_field": "body",
+    }
+
+    def test_sync_mode_builds_a_sync_client(self) -> None:
+        loader = FoxNoseLoader.from_client_params(**self._PARAMS)
+        assert isinstance(loader.client, FluxClient)
+        assert loader.async_client is None
+        assert loader.collection_path == "articles"
+
+    def test_async_mode_builds_an_async_client(self) -> None:
+        loader = FoxNoseLoader.from_client_params(async_mode=True, **self._PARAMS)
+        assert isinstance(loader.async_client, AsyncFluxClient)
+        assert loader.client is None
+        assert loader.collection_path == "articles"
+
+    def test_extra_kwargs_reach_the_instance(self) -> None:
+        loader = FoxNoseLoader.from_client_params(batch_size=7, **self._PARAMS)
+        assert loader.batch_size == 7
+
+    def test_the_legacy_alias_still_works_through_the_factory(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The warning is one-shot per PROCESS, so clear the record first.
+
+        Without that, whether this test sees a warning depends on what ran
+        before it: it passed alone and failed in the full suite.
+        """
+        from langchain_foxnose import _deprecation
+
+        monkeypatch.setattr(_deprecation, "_warned", set())
+        params = {k: v for k, v in self._PARAMS.items() if k != "collection_path"}
+        with pytest.warns(DeprecationWarning, match="folder_path is deprecated"):
+            loader = FoxNoseLoader.from_client_params(folder_path="articles", **params)
+        assert loader.collection_path == "articles"

@@ -40,14 +40,14 @@ from langchain_foxnose import FoxNoseRetriever
 
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     search_mode="hybrid",
     top_k=5,
 )
 ```
 
-- `folder_path` — the FoxNose folder connected to your Flux API
+- `collection_path` — the FoxNose collection connected to your Flux API
 - `page_content_field` — which `data` field becomes the document's `page_content`
 - `search_mode` — `"text"`, `"vector"`, `"hybrid"`, or `"vector_boosted"`
 - `top_k` — how many results to return
@@ -61,20 +61,40 @@ for doc in docs:
     print(doc.metadata)
 ```
 
-### 4. Use in a LangChain chain
+### 4. Use with a LangChain agent
+
+Wrap the retriever as a tool and hand it to an agent:
 
 ```python
-from langchain_openai import ChatOpenAI
-from langchain.chains import RetrievalQA
+from langchain.agents import create_agent
 
-qa = RetrievalQA.from_chain_type(
-    llm=ChatOpenAI(model="gpt-4"),
-    retriever=retriever,
-    return_source_documents=True,
+from langchain_foxnose import create_foxnose_tool
+
+tool = create_foxnose_tool(
+    client=client,
+    collection_path="knowledge-base",
+    page_content_field="body",
 )
-result = qa.invoke({"query": "How do I reset my password?"})
-print(result["result"])
+agent = create_agent(model="openai:gpt-4o", tools=[tool])
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "How do I reset my password?"}]}
+)
+print(result["messages"][-1].content)
 ```
+
+This needs the `langchain` package, which `langchain-foxnose` does not depend
+on — it only requires `langchain-core`, so the agent framework stays your
+choice. Install it with `pip install langchain langchain-openai`.
+
+!!! note "Migrating from LangChain 0.3"
+
+    `RetrievalQA` and the rest of `langchain.chains` were removed in LangChain
+    1.0 — the module no longer exists. `langchain.agents.create_agent` is the
+    replacement, and it takes `{"messages": [...]}` rather than
+    `{"query": ...}`. The legacy chains live on in the separate
+    `langchain-classic` package, but they are deprecated there with a declared
+    removal in 2.0, so new code should use an agent.
 
 ## Convenience Constructor
 
@@ -88,7 +108,7 @@ retriever = FoxNoseRetriever.from_client_params(
     base_url="https://<env_key>.fxns.io",
     api_prefix="my_api",
     auth=SimpleKeyAuth("YOUR_PUBLIC_KEY", "YOUR_SECRET_KEY"),
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
 )
 ```

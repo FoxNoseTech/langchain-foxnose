@@ -31,7 +31,7 @@ client = FluxClient(
 #
 # retriever = FoxNoseRetriever(
 #     client=client,
-#     folder_path="knowledge-base",
+#     collection_path="knowledge-base",
 #     page_content_field="body",
 #     search_mode="vector",
 #     embeddings=OpenAIEmbeddings(model="text-embedding-3-small"),
@@ -54,7 +54,7 @@ client = FluxClient(
 
 retriever = FoxNoseRetriever(
     client=client,
-    folder_path="knowledge-base",
+    collection_path="knowledge-base",
     page_content_field="body",
     search_mode="vector",
     query_vector=[0.01, -0.03, 0.15, 0.42, -0.08],  # your pre-computed vector
@@ -78,7 +78,7 @@ for doc in docs:
 #
 # retriever = FoxNoseRetriever(
 #     client=client,
-#     folder_path="knowledge-base",
+#     collection_path="knowledge-base",
 #     page_content_field="body",
 #     search_mode="vector_boosted",
 #     embeddings=OpenAIEmbeddings(model="text-embedding-3-small"),
