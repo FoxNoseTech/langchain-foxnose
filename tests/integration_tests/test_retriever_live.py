@@ -19,6 +19,23 @@ def _retriever(client: Any, path: str, field: str, **kwargs: Any) -> FoxNoseRetr
     return FoxNoseRetriever(client=client, collection_path=path, **kwargs)
 
 
+def _assert_usable(docs: Any, mode: str, top_k: int) -> None:
+    """Assert a search mode actually produced mapped documents.
+
+    `assert isinstance(docs, list)` used to stand in for this, which every mode
+    satisfied by returning nothing at all -- so a mode that silently matched
+    zero documents looked identical to one that worked.
+    """
+    assert docs, (
+        f"{mode} search matched nothing for FOXNOSE_QUERY. The content field "
+        f"must be marked vectorizable in the collection schema, and the corpus "
+        f"must have been indexed."
+    )
+    assert len(docs) <= top_k, f"{mode} search ignored top_k={top_k}"
+    assert all(doc.page_content for doc in docs), f"{mode} search returned empty content"
+    assert all("key" in doc.metadata for doc in docs)
+
+
 class TestSearchModes:
     def test_text_search_returns_documents(self, live_retriever: Any, query: str) -> None:
         docs = live_retriever.invoke(query)
@@ -41,7 +58,7 @@ class TestSearchModes:
             docs = retriever.invoke(query)
         except FoxnoseAPIError as exc:
             skip_if_vector_unavailable(exc)
-        assert isinstance(docs, list)
+        _assert_usable(docs, "hybrid", top_k=3)
 
     def test_vector_search(
         self,
@@ -58,7 +75,7 @@ class TestSearchModes:
             docs = retriever.invoke(query)
         except FoxnoseAPIError as exc:
             skip_if_vector_unavailable(exc)
-        assert isinstance(docs, list)
+        _assert_usable(docs, "vector", top_k=3)
 
     def test_vector_boosted_search(
         self,
@@ -79,7 +96,7 @@ class TestSearchModes:
             docs = retriever.invoke(query)
         except FoxnoseAPIError as exc:
             skip_if_vector_unavailable(exc)
-        assert isinstance(docs, list)
+        _assert_usable(docs, "vector_boosted", top_k=3)
 
 
 class TestFilter:

@@ -331,6 +331,12 @@ whole test category while the job still reports success — note that GitHub
 exports an unset secret as an **empty string**, not as an absent variable, so
 absence is not something the test code can detect on its own.
 
+For the same reason CI supplies **all fourteen** variables, including the ones
+marked optional above. Their defaults (`body`, `title`) are guesses about the
+corpus: right for a collection that happens to use those names, and a confusing
+run of failures for one that does not. Pinning them makes the fixture explicit
+rather than inferred.
+
 Skips for capabilities the backend genuinely lacks — vector search being
 unavailable, for instance — stay skips even in strict mode.
 
