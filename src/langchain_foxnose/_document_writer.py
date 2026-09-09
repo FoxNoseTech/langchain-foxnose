@@ -37,14 +37,18 @@ def map_document_to_data(
         page_content_field: ``data`` field that receives ``page_content``.
             Required unless *document_mapper* is given.
         document_mapper: Custom callable ``(document) -> dict`` for full
-            control. When set, every other option is ignored.
+            control. When set, EVERY other option is ignored, including
+            *reserved_metadata_keys*: the mapper owns its output, and silently
+            deleting keys from it would make a mapper that deliberately writes
+            an identifier into ``data`` impossible to express.
         metadata_fields: Whitelist of metadata keys to write.
             Mutually exclusive with *exclude_metadata_fields*.
         exclude_metadata_fields: Blacklist of metadata keys to skip.
         include_sys_metadata: Whether to write keys in
             :data:`SYS_METADATA_KEYS`. Defaults to ``False``.
         reserved_metadata_keys: Metadata keys the caller consumes itself
-            (e.g. an external-id key). Always dropped, in either mode.
+            (e.g. an external-id key). Dropped from the mapping this function
+            builds; not applied when *document_mapper* is given.
 
     Returns:
         A ``data`` mapping suitable for ``FluxClient.create_resource()`` or
@@ -55,6 +59,7 @@ def map_document_to_data(
             a metadata key that collides with *page_content_field*.
     """
     if document_mapper is not None:
+        # No filtering of any kind on this path -- see *document_mapper* above.
         return dict(document_mapper(document))
 
     if page_content_field is None:

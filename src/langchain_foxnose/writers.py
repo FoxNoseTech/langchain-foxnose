@@ -106,10 +106,14 @@ class FoxNoseWriter:
             metadata keys (``key``, ``folder``, ``created_at``, ``updated_at``).
             Defaults to ``False`` — they are not schema fields.
         external_id_key: Metadata key holding an external deduplication id.
-            Its value is sent as the resource ``key`` and removed from ``data``.
-            The value must be a ``str`` or ``int``; anything else raises
-            ``TypeError``. A document without the key is written without one.
-            Reusing a value raises :class:`~foxnose_sdk.errors.ExternalIdConflict`.
+            Its value is sent as the resource ``key``. The value must be a
+            ``str`` or ``int``; anything else raises ``TypeError``. A document
+            without the key is written without one. Reusing a value raises
+            :class:`~foxnose_sdk.errors.ExternalIdConflict`.
+            The key is kept out of ``data`` when *page_content_field* builds the
+            mapping. With a *document_mapper* the mapper decides: whatever it
+            returns is written as-is, so a mapper that copies all metadata will
+            also write the identifier into ``data``.
 
     Note:
         Writes require a Flux key with write access. A collection whose
@@ -167,6 +171,12 @@ class FoxNoseWriter:
                 "'metadata_fields' and 'exclude_metadata_fields' are mutually "
                 "exclusive. Set only one."
             )
+
+        # "" is not a usable metadata key, and allowing it split this field into
+        # two readings: _external_id tested `is None` and would have looked up
+        # metadata[""], while _map_data tested truthiness and reserved nothing.
+        if external_id_key is not None and not external_id_key.strip():
+            raise ValueError("'external_id_key' must be a non-empty metadata key name.")
 
         self.client = client
         self.async_client = async_client
@@ -233,7 +243,7 @@ class FoxNoseWriter:
 
     def _map_data(self, document: Document) -> dict[str, Any]:
         """Map one Document to the FoxNose ``data`` payload."""
-        reserved = (self.external_id_key,) if self.external_id_key else ()
+        reserved = () if self.external_id_key is None else (self.external_id_key,)
         return map_document_to_data(
             document,
             page_content_field=self.page_content_field,

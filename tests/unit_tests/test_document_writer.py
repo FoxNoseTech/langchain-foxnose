@@ -182,3 +182,40 @@ class TestRoundTrip:
             "title": "T",
             "category": "tech",
         }
+
+
+class TestReservedKeysAndCustomMappers:
+    """Where the external-id key ends up, in each of the two mapping modes.
+
+    The two modes deliberately differ, so both are pinned here: a change to
+    either one should have to state itself.
+    """
+
+    def test_built_mapping_keeps_the_reserved_key_out_of_data(self) -> None:
+        data = map_document_to_data(
+            Document(page_content="body text", metadata={"source_id": "s1", "title": "T"}),
+            page_content_field="body",
+            reserved_metadata_keys=("source_id",),
+        )
+        assert data == {"body": "body text", "title": "T"}
+
+    def test_a_custom_mapper_owns_its_output(self) -> None:
+        """A mapper that copies metadata DOES write the id -- by its own choice.
+
+        Silently deleting keys from a mapper's return value would make a schema
+        with its own identifier field impossible to write.
+        """
+        data = map_document_to_data(
+            Document(page_content="body text", metadata={"source_id": "s1"}),
+            document_mapper=lambda doc: {"body": doc.page_content, **doc.metadata},
+            reserved_metadata_keys=("source_id",),
+        )
+        assert data == {"body": "body text", "source_id": "s1"}
+
+    def test_a_mapper_that_omits_the_id_writes_none(self) -> None:
+        data = map_document_to_data(
+            Document(page_content="body text", metadata={"source_id": "s1"}),
+            document_mapper=lambda doc: {"body": doc.page_content},
+            reserved_metadata_keys=("source_id",),
+        )
+        assert data == {"body": "body text"}

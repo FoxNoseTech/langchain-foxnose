@@ -498,3 +498,24 @@ class TestFromClientParams:
         )
         assert writer.async_client is not None
         assert writer.client is None
+
+
+class TestExternalIdKeyValidation:
+    def test_empty_external_id_key_is_rejected(self, mock_flux_client: Any) -> None:
+        """Neither None nor usable: it used to be read two different ways."""
+        with pytest.raises(ValueError, match="non-empty metadata key"):
+            FoxNoseWriter(
+                client=mock_flux_client,
+                collection_path="kb",
+                page_content_field="body",
+                external_id_key="",
+            )
+
+    def test_whitespace_external_id_key_is_rejected(self, mock_flux_client: Any) -> None:
+        with pytest.raises(ValueError, match="non-empty metadata key"):
+            FoxNoseWriter(
+                client=mock_flux_client,
+                collection_path="kb",
+                page_content_field="body",
+                external_id_key="   ",
+            )
