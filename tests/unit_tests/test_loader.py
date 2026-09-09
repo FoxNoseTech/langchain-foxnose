@@ -411,7 +411,7 @@ class TestCursorNormalisation:
 
     @staticmethod
     def _url(token: str, limit: int = 2) -> str:
-        return f"http://127.0.0.1:8000/api/articles?limit={limit}&next={token}"
+        return f"https://example.invalid/api/articles?limit={limit}&next={token}"
 
     def test_url_shaped_cursor_is_reduced_to_its_token(self) -> None:
         from langchain_foxnose.loaders import _extract_cursor
