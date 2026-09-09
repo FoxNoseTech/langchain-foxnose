@@ -277,6 +277,7 @@ class FoxNoseLoader(BaseLoader):
                 "Either provide a 'client' or use 'alazy_load()' with an 'async_client'."
             )
 
+        seen_cursors: set[str] = set()
         cursor: str | None = None
         while True:
             request_params = self._build_request_params(cursor)
@@ -287,10 +288,13 @@ class FoxNoseLoader(BaseLoader):
             yield from documents
 
             next_cursor = _extract_cursor(response.get("next"))
-            if next_cursor is None or next_cursor == cursor:
-                # A cursor that does not advance means the backend is handing
-                # back the same page; stop rather than loop forever.
+            # Every cursor is followed at most once. Checking only whether the
+            # cursor repeated the previous one would still spin forever on a
+            # cycle (A -> B -> A), and would re-yield the repeated page before
+            # noticing.
+            if next_cursor is None or next_cursor in seen_cursors:
                 break
+            seen_cursors.add(next_cursor)
             cursor = next_cursor
 
     async def alazy_load(self) -> AsyncIterator[Document]:
@@ -308,6 +312,7 @@ class FoxNoseLoader(BaseLoader):
                 "Either provide an 'async_client' or use 'lazy_load()' with a 'client'."
             )
 
+        seen_cursors: set[str] = set()
         cursor: str | None = None
         while True:
             request_params = self._build_request_params(cursor)
@@ -321,6 +326,9 @@ class FoxNoseLoader(BaseLoader):
                 yield doc
 
             next_cursor = _extract_cursor(response.get("next"))
-            if next_cursor is None or next_cursor == cursor:
+            # See lazy_load: a cursor is followed at most once, so a cycle
+            # terminates instead of spinning.
+            if next_cursor is None or next_cursor in seen_cursors:
                 break
+            seen_cursors.add(next_cursor)
             cursor = next_cursor

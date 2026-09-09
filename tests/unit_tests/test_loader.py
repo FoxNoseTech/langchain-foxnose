@@ -469,6 +469,56 @@ class TestCursorNormalisation:
         assert client.list_resources.call_count == 2
         assert len(docs) == 4
 
+    def test_load_stops_on_a_cursor_cycle(self) -> None:
+        """A -> B -> A: no cursor repeats the PREVIOUS one, yet it never ends.
+
+        Guarding only against an immediately repeated cursor let this spin
+        forever. The bounded side_effect makes a lost guard fail on a used-up
+        iterator instead of hanging the suite.
+        """
+        page_a = _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("b"))
+        page_b = _make_list_response(SAMPLE_RESULTS[2:], next_cursor=self._url("a"))
+        client = MagicMock()
+        client.list_resources.side_effect = [page_a, page_b] * 6
+
+        docs = FoxNoseLoader(
+            client=client,
+            collection_path="articles",
+            page_content_field="body",
+            batch_size=2,
+        ).load()
+
+        # Page A (no cursor), page B (cursor "b"), page A again (cursor "a",
+        # never followed before so following it once is right), and only then
+        # does "b" repeat and the loop stops. Detection lands one fetch after
+        # the cycle closes, which is the earliest it can: a cursor is only
+        # known to be part of a cycle once it comes back a second time.
+        assert client.list_resources.call_count == 3
+        # The re-served page is therefore yielded twice. That is the backend
+        # contradicting itself, surfaced as visible duplication rather than
+        # hidden behind an infinite loop.
+        assert len(docs) == len(SAMPLE_RESULTS) + 2
+
+    async def test_alazy_load_stops_on_a_cursor_cycle(self) -> None:
+        """The async loop carries the same guard; it drifted apart once already."""
+        page_a = _make_list_response(SAMPLE_RESULTS[:2], next_cursor=self._url("b"))
+        page_b = _make_list_response(SAMPLE_RESULTS[2:], next_cursor=self._url("a"))
+        client = AsyncMock()
+        client.list_resources.side_effect = [page_a, page_b] * 6
+
+        docs = [
+            doc
+            async for doc in FoxNoseLoader(
+                async_client=client,
+                collection_path="articles",
+                page_content_field="body",
+                batch_size=2,
+            ).alazy_load()
+        ]
+
+        assert client.list_resources.call_count == 3
+        assert len(docs) == len(SAMPLE_RESULTS) + 2
+
     async def test_alazy_load_follows_a_url_shaped_cursor(self) -> None:
         client = AsyncMock()
         client.list_resources.side_effect = [
