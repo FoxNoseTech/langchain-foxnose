@@ -120,12 +120,11 @@ class FoxNoseWriter:
         connection does not accept writes raises
         :class:`~foxnose_sdk.errors.CollectionNotWritable`.
 
-        Data that fails the collection schema comes back as HTTP 422. Match on
-        ``status_code``, not on
-        :class:`~foxnose_sdk.errors.ContentValidationFailed`: the SDK maps only
-        ``content_validation_failed`` onto that class, while a Flux write
-        reports ``data_validation_error``, so it arrives as a plain
-        :class:`~foxnose_sdk.errors.FoxnoseAPIError`.
+        Data that fails the collection schema raises
+        :class:`~foxnose_sdk.errors.ContentValidationFailed`, whose ``errors``
+        list locates each offending field. This needs foxnose-sdk 0.8.1: before
+        that, a Flux write's ``data_validation_error`` was unmapped and arrived
+        as a plain :class:`~foxnose_sdk.errors.FoxnoseAPIError`.
 
     Note:
         Batches are written strictly sequentially and stop at the first

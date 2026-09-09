@@ -12,7 +12,7 @@ import uuid
 from typing import Any
 
 import pytest
-from foxnose_sdk.errors import ExternalIdConflict, FoxnoseAPIError
+from foxnose_sdk.errors import ContentValidationFailed, ExternalIdConflict
 from langchain_core.documents import Document
 
 from langchain_foxnose import FoxNoseBatchWriteError, FoxNoseWriter
@@ -77,9 +77,10 @@ def test_schema_violation_writes_nothing(
 ) -> None:
     """A field name with a random suffix cannot exist in any schema.
 
-    Matching on the status code rather than ContentValidationFailed is
-    deliberate: the SDK maps only "content_validation_failed" onto that class,
-    while a Flux write reports "data_validation_error".
+    Asserting the TYPED exception, not just the status code: a Flux write
+    reports "data_validation_error", which foxnose-sdk only began mapping onto
+    ContentValidationFailed in 0.8.1. This test is what would catch that
+    mapping regressing.
     """
     marker = uuid.uuid4().hex
     writer = FoxNoseWriter(
@@ -93,8 +94,9 @@ def test_schema_violation_writes_nothing(
     assert exc.value.failed_index == 0
     assert exc.value.pending_indexes == []
     cause = exc.value.cause
-    assert isinstance(cause, FoxnoseAPIError), cause
+    assert isinstance(cause, ContentValidationFailed), (type(cause).__name__, cause)
     assert cause.status_code == 422, cause
+    assert cause.errors, "the typed exception carried no structured errors"
 
 
 def test_partial_batch_reports_all_three_ranges(

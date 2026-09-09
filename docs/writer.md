@@ -5,7 +5,7 @@ through the Flux write API. Each document becomes one FoxNose resource,
 published immediately.
 
 It is the write counterpart to [`FoxNoseRetriever`](retriever.md) and
-[`FoxNoseLoader`](loader.md). Requires `foxnose-sdk>=0.8.0`.
+[`FoxNoseLoader`](loader.md). Requires `foxnose-sdk>=0.8.1`.
 
 ## Quick Start
 
@@ -188,7 +188,7 @@ Every underlying error from `add_documents` / `aadd_documents` is wrapped in
 after it is dead code:
 
 ```python
-from foxnose_sdk.errors import ExternalIdConflict, FoxnoseAPIError
+from foxnose_sdk.errors import ContentValidationFailed, ExternalIdConflict
 from langchain_foxnose import FoxNoseBatchWriteError
 
 try:
@@ -201,24 +201,18 @@ except FoxNoseBatchWriteError as exc:
     cause = exc.cause
     if isinstance(cause, ExternalIdConflict):
         print("  that external id already exists")
-    elif isinstance(cause, FoxnoseAPIError) and cause.status_code == 422:
-        print(f"  schema rejected the document: {cause.detail}")
+    elif isinstance(cause, ContentValidationFailed):
+        for problem in cause.errors:
+            print(f"  {problem['json_path']}: {problem['message']}")
     raise
 ```
 
-!!! warning "Match a schema violation on the status code, not on `ContentValidationFailed`"
+!!! note "Needs foxnose-sdk 0.8.1"
 
-    `foxnose-sdk` maps only `(422, "content_validation_failed")` onto the typed
-    `ContentValidationFailed`, but a **Flux write** that violates the schema
-    comes back as `data_validation_error`, which is not mapped — so it arrives
-    as a plain `FoxnoseAPIError` and an `isinstance(cause,
-    ContentValidationFailed)` branch never fires. Verified against a live
-    backend. Check `cause.status_code == 422` instead, and read `cause.detail`;
-    if you also want the structured list, guard it:
-
-    ```python
-    errors = getattr(cause, "errors", None)  # only on ContentValidationFailed
-    ```
+    A Flux write reports a schema violation as `data_validation_error`, which
+    earlier versions did not map onto `ContentValidationFailed` — it arrived as
+    a plain `FoxnoseAPIError`, so the branch above never fired. Both codes raise
+    the typed exception from 0.8.1 on, which is why that is the floor.
 
 The three ranges mean exactly this:
 
@@ -247,7 +241,7 @@ resource and therefore does not wrap):
 |-----------|------|---------|
 | `CollectionNotWritable` | 403 | The collection's connection does not accept writes, or the key lacks write access |
 | `ExternalIdConflict` | 409 | The supplied external id already identifies a resource |
-| `ContentValidationFailed` | 422 | `data` failed the collection schema; see `.errors` / `.errors_truncated`. **A Flux write reports this as a plain `FoxnoseAPIError` with `error_code="data_validation_error"`** — see the warning above. |
+| `ContentValidationFailed` | 422 | `data` failed the collection schema; see `.errors` / `.errors_truncated`. Raised for both `content_validation_failed` and a Flux write's `data_validation_error`. |
 | `UpstreamError` | 502 | The write could not be confirmed — outcome unknown |
 
 ## Requirements

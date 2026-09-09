@@ -19,7 +19,7 @@ LangChain integration for [FoxNose](https://foxnose.net?utm_source=github&utm_me
 pip install langchain-foxnose
 ```
 
-Requires Python 3.10+, `foxnose-sdk>=0.8.0`, and `langchain-core>=1.0`.
+Requires Python 3.10+, `foxnose-sdk>=0.8.1`, and `langchain-core>=1.0`.
 
 ## Quick Start
 
@@ -54,7 +54,7 @@ for doc in docs:
 > **Note (0.4.0):** The `folder_path` kwarg on `FoxNoseRetriever`, `FoxNoseLoader`,
 > and `create_foxnose_tool` is deprecated in favor of `collection_path`. The
 > legacy kwarg still works but emits a `DeprecationWarning`; it will be removed
-> in 1.0. Requires `foxnose-sdk>=0.8.0`.
+> in 1.0. Requires `foxnose-sdk>=0.8.1`.
 
 ## Features
 

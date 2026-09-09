@@ -5,7 +5,7 @@ API with `create` and `update` in its allowed methods.
 """
 
 from foxnose_sdk.auth import SimpleKeyAuth
-from foxnose_sdk.errors import ExternalIdConflict, FoxnoseAPIError
+from foxnose_sdk.errors import ContentValidationFailed, ExternalIdConflict
 from foxnose_sdk.flux import FluxClient
 from langchain_core.documents import Document
 
@@ -53,11 +53,12 @@ except FoxNoseBatchWriteError as exc:
     cause = exc.cause
     if isinstance(cause, ExternalIdConflict):
         print("  That source_id already exists in the collection.")
-    elif isinstance(cause, FoxnoseAPIError) and cause.status_code == 422:
-        # Match on the status code, not on ContentValidationFailed: a Flux write
-        # reports a schema violation as error_code="data_validation_error",
-        # which foxnose-sdk does not map onto that class.
-        print(f"  Schema rejected the document: {cause.detail}")
+    elif isinstance(cause, ContentValidationFailed):
+        # Needs foxnose-sdk >= 0.8.1. Before that a Flux write's
+        # "data_validation_error" was unmapped and arrived as a plain
+        # FoxnoseAPIError, so this branch never fired.
+        for problem in cause.errors:
+            print(f"  Schema rejected {problem['json_path']}: {problem['message']}")
     raise
 
 print(f"Created resources: {keys}\n")

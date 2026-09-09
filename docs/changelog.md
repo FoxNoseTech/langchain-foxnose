@@ -16,7 +16,9 @@
   is dropped. The integration's public behaviour is unchanged — the
   `langchain-core` surface it uses (`BaseRetriever`, `BaseLoader`,
   `create_retriever_tool`) is identical across 0.3.x and 1.x.
-- Require `foxnose-sdk>=0.8.0`.
+- Require `foxnose-sdk>=0.8.1`, for the `data_validation_error` mapping a Flux
+  write depends on: before it, a schema violation arrived as a plain
+  `FoxnoseAPIError` and no `except ContentValidationFailed` branch could fire.
 
 ### Added
 
