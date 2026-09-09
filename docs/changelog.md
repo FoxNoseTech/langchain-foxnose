@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 (2026-09-03)
+## 0.4.0 (2026-09-09)
 
 ### Changed
 
@@ -47,6 +47,24 @@
 
 ### Fixed
 
+- **`FoxNoseLoader` could paginate forever.** FoxNose returns the `next` field
+  as a full URL, not as the opaque token the `next` query parameter accepts.
+  Feeding the URL back meant the backend could not parse it, silently answered
+  with page one again and returned the same `next` — `load()` re-fetched the
+  first page indefinitely (17k requests in 30 seconds against a live backend).
+  Cursors are now reduced to their token, and each is followed at most once, so
+  a backend that cycles (`A -> B -> A`) terminates instead of spinning.
+- **`top_k` did not limit results in `hybrid` and `vector_boosted` modes.** It
+  was forwarded only as the vector-side candidate count, leaving the page size
+  at the backend default, so a retriever built with `top_k=3` could return
+  every matching document. It now caps the results in every mode, as
+  documented; an explicit `search_kwargs={"limit": ...}` still takes
+  precedence.
+- **`py.typed` is now shipped inside the package.** The marker sat at the
+  repository root, where PEP 561 does not look for it, so it never reached the
+  wheel: every downstream project got `missing py.typed marker` from mypy and
+  fell back to `Any` for the whole package, despite the source being fully
+  annotated.
 - `search_kwargs={"truncate_text": ...}` used to reach the request body, where
   `foxnose-sdk` 0.8.0 rejects it. Query-string keys are now rejected at
   validation time with a message pointing at the new parameters.
