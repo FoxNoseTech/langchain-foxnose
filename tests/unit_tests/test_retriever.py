@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import math
+from typing import Any, ClassVar
 from unittest.mock import MagicMock
 
 import pytest
+from foxnose_sdk.auth import SimpleKeyAuth
+from foxnose_sdk.flux import AsyncFluxClient, FluxClient
 from langchain_core.embeddings import Embeddings
 from pydantic import ValidationError
 
@@ -969,3 +972,57 @@ class TestTopKReachesLimitInEveryMode:
         call = getattr(mock_flux_client, method).call_args
         limit = call[1]["body"]["limit"] if mode == "text" else call[1]["limit"]
         assert limit == 7
+
+
+class TestRetrieverFromClientParamsAndValidators:
+    """Two branches the offline suite never reached.
+
+    ``from_client_params`` builds its own client, so no mock stands in for it,
+    and the async half was only ever exercised live. The non-mapping guard in
+    the folder_path validator fires when pydantic hands the validator something
+    that is not a dict -- validating from an existing instance, for example.
+    """
+
+    _PARAMS: ClassVar[dict[str, Any]] = {
+        "base_url": "https://e.fxns.io",
+        "api_prefix": "p",
+        "auth": SimpleKeyAuth("public", "secret"),
+        "collection_path": "articles",
+        "page_content_field": "body",
+    }
+
+    def test_async_mode_builds_an_async_client(self) -> None:
+        retriever = FoxNoseRetriever.from_client_params(async_mode=True, **self._PARAMS)
+        assert isinstance(retriever.async_client, AsyncFluxClient)
+        assert retriever.client is None
+        assert retriever.collection_path == "articles"
+
+    def test_sync_mode_builds_a_sync_client(self) -> None:
+        retriever = FoxNoseRetriever.from_client_params(**self._PARAMS)
+        assert isinstance(retriever.client, FluxClient)
+        assert retriever.async_client is None
+
+    def test_revalidating_an_instance_round_trips(self, mock_flux_client: MagicMock) -> None:
+        original = FoxNoseRetriever(
+            client=mock_flux_client,
+            collection_path="articles",
+            page_content_field="body",
+            top_k=4,
+        )
+        copied = FoxNoseRetriever.model_validate(original)
+        assert copied.collection_path == "articles"
+        assert copied.top_k == 4
+
+    @pytest.mark.parametrize("payload", [None, "articles", 42, ["articles"]])
+    def test_before_validators_return_a_non_mapping_untouched(self, payload: Any) -> None:
+        """Both mode="before" validators guard against a non-dict input.
+
+        Exercised directly rather than through the model: pydantic skips
+        validation when the input is already an instance of the model, so no
+        constructor call reaches these branches, and a guard nothing covers is
+        a guard nobody notices breaking.
+        """
+        migrate = FoxNoseRetriever._migrate_folder_path
+        alias = FoxNoseRetriever._alias_k_to_top_k
+        assert migrate(payload) is payload
+        assert alias(payload) is payload

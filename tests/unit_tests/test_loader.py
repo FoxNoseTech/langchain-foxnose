@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from foxnose_sdk.auth import SimpleKeyAuth
+from foxnose_sdk.flux import AsyncFluxClient, FluxClient
 
 from langchain_foxnose import FoxNoseLoader
 from tests.conftest import SAMPLE_RESULTS, _make_list_response
@@ -549,3 +551,52 @@ class TestCursorNormalisation:
         docs = [doc async for doc in loader.alazy_load()]
         assert client.list_resources.call_count == 2
         assert len(docs) == 4
+
+
+class TestLoaderFromClientParams:
+    """The factory builds its own client, so nothing mocks it out.
+
+    Constructing a Flux client opens no socket, so both branches are reachable
+    offline -- they were previously exercised only by the live suite, which
+    left the whole factory uncovered on every offline run.
+    """
+
+    _PARAMS: ClassVar[dict[str, Any]] = {
+        "base_url": "https://e.fxns.io",
+        "api_prefix": "p",
+        "auth": SimpleKeyAuth("public", "secret"),
+        "collection_path": "articles",
+        "page_content_field": "body",
+    }
+
+    def test_sync_mode_builds_a_sync_client(self) -> None:
+        loader = FoxNoseLoader.from_client_params(**self._PARAMS)
+        assert isinstance(loader.client, FluxClient)
+        assert loader.async_client is None
+        assert loader.collection_path == "articles"
+
+    def test_async_mode_builds_an_async_client(self) -> None:
+        loader = FoxNoseLoader.from_client_params(async_mode=True, **self._PARAMS)
+        assert isinstance(loader.async_client, AsyncFluxClient)
+        assert loader.client is None
+        assert loader.collection_path == "articles"
+
+    def test_extra_kwargs_reach_the_instance(self) -> None:
+        loader = FoxNoseLoader.from_client_params(batch_size=7, **self._PARAMS)
+        assert loader.batch_size == 7
+
+    def test_the_legacy_alias_still_works_through_the_factory(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The warning is one-shot per PROCESS, so clear the record first.
+
+        Without that, whether this test sees a warning depends on what ran
+        before it: it passed alone and failed in the full suite.
+        """
+        from langchain_foxnose import _deprecation
+
+        monkeypatch.setattr(_deprecation, "_warned", set())
+        params = {k: v for k, v in self._PARAMS.items() if k != "collection_path"}
+        with pytest.warns(DeprecationWarning, match="folder_path is deprecated"):
+            loader = FoxNoseLoader.from_client_params(folder_path="articles", **params)
+        assert loader.collection_path == "articles"
