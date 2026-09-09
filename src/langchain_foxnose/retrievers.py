@@ -569,7 +569,11 @@ class FoxNoseRetriever(BaseRetriever):
             vector_weight=hc.vector_weight,
             text_weight=hc.text_weight,
             rerank_results=hc.rerank_results,
-            limit=named.get("limit"),
+            # top_k is documented as the maximum number of results, so it has to
+            # reach `limit` too. Passing it only as the vector-side top_k left
+            # the page size at the backend default, and a retriever built with
+            # top_k=3 answered with every matching document.
+            limit=named.get("limit", top_k),
             offset=named.get("offset"),
             query_params=self._build_query_params(),
             **extra,
@@ -586,7 +590,9 @@ class FoxNoseRetriever(BaseRetriever):
             "boost_factor": bc.boost_factor,
             "boost_similarity_threshold": bc.similarity_threshold,
             "max_boost_results": bc.max_boost_results,
-            "limit": named.get("limit"),
+            # See _search_hybrid: top_k caps the results, not just the
+            # vector-side candidate pool.
+            "limit": named.get("limit", top_k),
             "offset": named.get("offset"),
             "query_params": self._build_query_params(),
         }
@@ -662,7 +668,11 @@ class FoxNoseRetriever(BaseRetriever):
             vector_weight=hc.vector_weight,
             text_weight=hc.text_weight,
             rerank_results=hc.rerank_results,
-            limit=named.get("limit"),
+            # top_k is documented as the maximum number of results, so it has to
+            # reach `limit` too. Passing it only as the vector-side top_k left
+            # the page size at the backend default, and a retriever built with
+            # top_k=3 answered with every matching document.
+            limit=named.get("limit", top_k),
             offset=named.get("offset"),
             query_params=self._build_query_params(),
             **extra,
@@ -679,7 +689,9 @@ class FoxNoseRetriever(BaseRetriever):
             "boost_factor": bc.boost_factor,
             "boost_similarity_threshold": bc.similarity_threshold,
             "max_boost_results": bc.max_boost_results,
-            "limit": named.get("limit"),
+            # See _search_hybrid: top_k caps the results, not just the
+            # vector-side candidate pool.
+            "limit": named.get("limit", top_k),
             "offset": named.get("offset"),
             "query_params": self._build_query_params(),
         }

@@ -909,3 +909,63 @@ class TestRetrieverRuntimeTopK:
         )
         with pytest.raises(ValueError, match=r"(?i)cannot pass both"):
             retriever.invoke("query", k=1, top_k=1)
+
+
+class TestTopKReachesLimitInEveryMode:
+    """``top_k`` is documented as the maximum number of RESULTS.
+
+    Hybrid and vector-boosted used to forward it only as the vector-side
+    candidate count, leaving the page size at the backend default: a retriever
+    built with ``top_k=3`` answered with every matching document. Each mode is
+    pinned separately because each builds its request differently.
+    """
+
+    @pytest.mark.parametrize(
+        ("mode", "method"),
+        [
+            ("text", "search"),
+            ("vector", "vector_search"),
+            ("hybrid", "hybrid_search"),
+            ("vector_boosted", "boosted_search"),
+        ],
+    )
+    def test_top_k_becomes_the_limit(
+        self, mock_flux_client: MagicMock, mode: str, method: str
+    ) -> None:
+        FoxNoseRetriever(
+            client=mock_flux_client,
+            collection_path="articles",
+            page_content_field="body",
+            search_mode=mode,
+            top_k=3,
+        ).invoke("q")
+
+        call = getattr(mock_flux_client, method).call_args
+        limit = call[1]["body"]["limit"] if mode == "text" else call[1]["limit"]
+        assert limit == 3
+
+    @pytest.mark.parametrize(
+        ("mode", "method"),
+        [
+            ("text", "search"),
+            ("vector", "vector_search"),
+            ("hybrid", "hybrid_search"),
+            ("vector_boosted", "boosted_search"),
+        ],
+    )
+    def test_an_explicit_limit_still_wins(
+        self, mock_flux_client: MagicMock, mode: str, method: str
+    ) -> None:
+        """search_kwargs['limit'] overrides top_k -- the fallback is only a default."""
+        FoxNoseRetriever(
+            client=mock_flux_client,
+            collection_path="articles",
+            page_content_field="body",
+            search_mode=mode,
+            top_k=3,
+            search_kwargs={"limit": 7},
+        ).invoke("q")
+
+        call = getattr(mock_flux_client, method).call_args
+        limit = call[1]["body"]["limit"] if mode == "text" else call[1]["limit"]
+        assert limit == 7
