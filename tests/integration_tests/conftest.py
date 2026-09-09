@@ -42,6 +42,7 @@ Optional (see the README for the full table):
 from __future__ import annotations
 
 import os
+import pathlib
 from collections.abc import Iterator
 from typing import Any, NoReturn
 
@@ -66,14 +67,27 @@ WRITE_ENV_VARS = [
     "FOXNOSE_WRITE_COLLECTION_PATH",
 ]
 
+# Codes that mean the BACKEND CANNOT DO THIS AT ALL. Only a genuine missing
+# capability belongs here, because these skip even in required mode.
+#
+# Deliberately absent: "invalid_request" and "field_not_found". Both were here
+# once, and both are produced by a request this library built wrongly -- which
+# is the exact class of bug these live tests exist to catch. Treating them as
+# capability gaps turned a real regression into a green skip.
 VECTOR_SKIP_CODES = {
     "vector_search_not_enabled",
     "vector_search_not_available",
-    "invalid_request",
+}
+
+# Codes that mean the ENVIRONMENT IS NOT SET UP the way the fixture contract
+# describes -- a wrong collection path, a prefix without the collection
+# attached, a field that is not vectorizable. Configuration, not capability, so
+# these route through skip_unconfigured and become failures in required mode.
+VECTOR_CONFIG_CODES = {
     "field_not_found",
 }
 
-FLUX_SKIP_CODES = {
+FLUX_CONFIG_CODES = {
     "environment_not_found",
     "api_not_found",
     "folder_not_found",
@@ -98,24 +112,59 @@ def skip_unconfigured(reason: str) -> NoReturn:
 
 
 def skip_on_flux_unavailable(exc: Any) -> NoReturn:
-    """Skip when the backend is not wired for this test, else re-raise."""
-    if getattr(exc, "error_code", None) in FLUX_SKIP_CODES:
-        pytest.skip(f"Flux API not configured: {exc.error_code}")
+    """Handle a Flux error that means the environment is not set up, else re-raise.
+
+    Every code here describes wiring the fixture contract requires, so this
+    goes through skip_unconfigured: in required mode a misconfigured
+    environment must fail rather than quietly retire the test.
+    """
+    if getattr(exc, "error_code", None) in FLUX_CONFIG_CODES:
+        skip_unconfigured(f"Flux API not configured for this test: {exc.error_code}")
     raise exc
 
 
 def skip_if_vector_unavailable(exc: Any) -> NoReturn:
-    """Skip when vector search is not usable here, else re-raise.
+    """Handle a vector-search error, else re-raise.
 
-    A backend capability, not configuration: this skips even in required mode.
+    A missing capability always skips -- no fixture can conjure vector support
+    the backend does not have. A misconfigured field is the fixture's problem
+    and fails in required mode. Anything else is a bug in the request this
+    library built, and propagates.
     """
-    if getattr(exc, "error_code", None) in VECTOR_SKIP_CODES:
-        pytest.skip(f"Vector search unavailable: {exc.error_code}")
+    code = getattr(exc, "error_code", None)
+    if code in VECTOR_SKIP_CODES:
+        pytest.skip(f"Vector search unavailable: {code}")
+    if code in VECTOR_CONFIG_CODES:
+        skip_unconfigured(
+            f"Vector search rejected the fixture ({code}): the content field must "
+            f"be marked vectorizable in the collection schema"
+        )
     raise exc
 
 
+_PACKAGE_DIR = pathlib.Path(__file__).parent
+
+
+def _belongs_to_this_package(item: pytest.Item) -> bool:
+    try:
+        path = pathlib.Path(str(item.fspath)).resolve()
+    except (AttributeError, OSError):
+        return False
+    return _PACKAGE_DIR.resolve() in path.parents
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Skip the whole package when the read credentials are absent."""
+    """Skip THIS package when the read credentials are absent.
+
+    pytest calls the hook once for the WHOLE session, including items collected
+    from other directories, so the list has to be filtered by path. Without
+    that filter a plain `pytest tests/` in a shell with no credentials marked
+    the offline unit suite as skipped too, and reported a green run that had
+    tested nothing at all.
+    """
+    mine = [item for item in items if _belongs_to_this_package(item)]
+    if not mine:
+        return
     missing = [
         " or ".join(names)
         for names in READ_ENV_VARS
@@ -123,8 +172,18 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     ]
     if not missing:
         return
-    skip = pytest.mark.skip(reason=f"Missing env vars: {', '.join(missing)}")
-    for item in items:
+
+    reason = f"Missing env vars: {', '.join(missing)}"
+    if os.environ.get("FOXNOSE_INTEGRATION_REQUIRED"):
+        # Required mode must not be satisfiable by supplying no credentials at
+        # all: skipping here would let the strict CI job pass having run none
+        # of the suite it exists to run.
+        raise pytest.UsageError(
+            f"FOXNOSE_INTEGRATION_REQUIRED is set, but the integration suite is "
+            f"not configured. {reason}"
+        )
+    skip = pytest.mark.skip(reason=reason)
+    for item in mine:
         item.add_marker(skip)
 
 
